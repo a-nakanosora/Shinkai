@@ -1,0 +1,354 @@
+'use strict'
+
+const html = s => document.createRange().createContextualFragment(s.trim()).firstChild
+function redirect(url){ location.href = url }
+
+
+function $d(ns){
+    /// extractor
+    /// e.g.  $d`a, b`({a:123, b:"abc", c:"zzz"})
+    ///       [{a:123, b:"abc", c:"zzz"}].map($d`a b`)
+    // const ks = (ns.raw ? ns[0] : ns).split(/\,/g).map(s=>s.trim())
+    const ks = (ns.raw ? ns[0] : ns).split(/[\,\s]+/g).map(s=>s.trim())
+    return obj=>{
+        const o = {}
+        ks.forEach(k=>{ o[k]=obj[k] })
+        return o
+    }
+}
+
+function eachSlice(arr, size){
+  const a = []
+  for (let i=0, l=arr.length; i<l; i+=size)
+    a.push(arr.slice(i, i+size))
+  return a
+}
+
+function arrRemoved(arr, v){
+  let a = arr.concat()
+  let i
+  while((i = a.indexOf(v)) > -1)
+    a.splice(i,1)
+  return a
+}
+
+function assert(b,msg='',obj=null){
+  if(!b) {
+    if(obj)
+      console.warn(...['Assertion Error:', msg, obj].filter(v=>!!v))
+    throw new Error(msg ? 'Assertion Error: '+msg : 'Assertion Error.')
+  }
+}
+
+function sleep(interval){
+  return new Promise(ok=>setInterval(ok, interval))
+}
+const lag = ()=>sleep(1)
+
+function* zip(a,b){
+  const l = Math.min(a.length, b.length)
+  for(let i=0; i<l; i++)
+    yield [a[i], b[i]]
+}
+
+function* range(begin, end=null){
+  if(end===null)
+    [begin,end] = [0,begin]
+  for (let i=begin; i<end; i++)
+    yield i
+}
+
+class ThrottleTime {
+  static create(){
+    function throttle(thres=10){
+      const t0 = throttle.t || 0
+      const t = Date.now()
+      if(t-t0 < thres)
+        return true
+      throttle.t = t
+      return false
+    }
+    return throttle
+  }
+}
+
+function _do(f){
+  return f()
+}
+
+function isobj(o){return o.constructor === Object}
+
+function clone(v){
+  /// shallow copy
+  if(isobj(v)) {
+    const o = {...v}
+    // return Object.isFrozen(v) ? Object.freeze(o) :
+    return Object.isSealed(v) ? Object.seal(o) : o
+  } else if(v instanceof Array)
+    return [...v]
+  else {
+    console.warn('clone Error: unsupported type: ', v)
+    throw new Error('clone Error: unsupported type: '+v)
+  }
+}
+
+function omap(obj, f){
+  /// e.g. omap({x:123, y:456}, v=>v*2)
+  const o = {}
+  Object.entries(obj).map(([n,v])=>o[n]=f(v, n))
+  return o
+}
+
+function ofilter(obj, f){
+  /// e.g. ofilter({x:123, y:456}, v=>v>200)
+  const o = {}
+  Object.entries(obj).map(([n,v])=>{
+    if(f(v, n))
+      o[n]=v
+  })
+  return o
+}
+
+function oset(keys){
+  /// e.g. oset(['foo', 'bar'])
+  const o = {}
+  keys.forEach(s=> o[s]=true)
+  return o
+}
+
+
+function keyset(keys){
+  /// e.g. keyset(`x,y,z:{a},'p q r'`)
+  assert(typeof keys === 'string')
+  assert(keys.match(/^[a-z\d_$'"\s\n:{},\-]*$/i))
+  const s = keys.replace(/([a-z\d_$'"])\s*(\,|\}|$)/img, '$1:true$2')
+                .replace(/\{[\s\n]*\}/g, 'true') /// 'a:{}' -> 'a:true'
+  // console.log(s)
+  // console.log('({'+s+'})')
+  return eval('({'+s+'})')
+}
+
+function oextract(obj, keys){
+  /**
+  e.g.
+    oextract({x:123, y:{z:456, w:789}}, `x, y`) => {x:123, y:{z:456, w:789}}
+    oextract({x:123, y:{z:456, w:789}}, `x, y:{z}`) => {x:123, y:{z:456}}
+  */
+  assert(isobj(keys) || typeof keys === 'string')
+  const keys2 = isobj(keys) ? keys : keyset(keys)
+  const o = {}
+  const rec = (src, dest, ks)=>{
+    for(const [n, x] of Object.entries(ks)) {
+      if(!(n in src))
+        continue
+
+      if(isobj(x)) {
+        if(src[n] && isobj(src[n])) {
+          dest[n] = {}
+          rec(src[n], dest[n], x)
+        }
+      } else
+        dest[n] = src[n]
+    }
+  }
+  rec(obj, o, keys2)
+  return o
+}
+
+
+
+/**
+osel(obj, selstr)
+e.g.
+  osel({
+    a:[7,6,5,4,3],
+    b:123,
+    c:456,
+    e: { f: { bar:'bbb' }, },
+    x: [{y:1,z:2}, {y:3}, {z:4}],
+    ho: [
+      { ge:[ {piyo:1}, {piyo:2}, {piyo:3}], hhgg: -1, },
+      { ge:[ {piyo:4}, {piyo:5}, {piyo:6}], hhgg: -2, },
+    ],
+    "test test": 123,
+    "te-st-2": 456,
+  }, `
+      a[],
+      b[],
+      c,
+      e[],
+      x[]: { y },
+      ho[]:{
+        ge[]:{piyo},
+        hhgg,
+      },
+      "test test",
+      te-st-2,
+  `)
+*/
+window.osel = _do(_=>{
+  function makeKeySelector(keys0){
+    const s00 = keys0.raw ? keys0.raw[0] : keys0
+    const s0 = s00.trim()[0]==='{' ? s00 : '{'+s00+'}'
+
+    if(!makeKeySelector._caches)
+      makeKeySelector._caches = {}
+    if(makeKeySelector._caches[s0])
+      return makeKeySelector._caches[s0]
+
+    const stack = []
+    let m
+    let i=0
+    let s = s0
+    while(m = s.match(/{[^{}]+}/)) {
+      const id = `##BLOCK${i++}##`
+      stack.push({s:m[0], id})
+      s = s.replace(/{[^{}]+}/, id)
+    }
+
+    ///
+    const readKey = s=> s.match(/^\s*'(?:\\'|[^'])+'/) || s.match(/^\s*"(?:\\"|[^"])+"/) || s.match(/^\s*[a-z\d_$\-]+/i)
+    const f = s0=>{
+      assert(s0[0]==='{' && s0[s0.length-1]==='}')
+      const s = s0.slice(1,-1)
+      assert(!s.match(/{|}/))
+
+      const res = {}
+
+      let d = s
+      let lim=0
+      while(d){
+        if(lim++>10000)
+          throw new Error('limit exceeded.')
+        const m = readKey(d)
+        assert(m)
+
+        const key = m[0].trim().replace(/^['"]\s*/, '').replace(/\s*['"]$/, '')
+        let arraySelector = false
+        const rest = (_=>{
+          const a = d.slice(m[0].length).trim()
+          if(a.match(/^\[\s*\]/)) {
+            arraySelector = true
+            return a.replace(/^\[\s*\]/, '')
+          }
+          return a
+        })()
+
+        if(rest.match(/^\,|^\s*$/)) {
+          res[key] = {arraySelector}
+          d = rest.replace(/^\,|^\s*$/, '').trim()
+        } else if(rest.match(/:\s*##BLOCK\d+##\s*\,?/)){
+          res[key] = {blockId: rest.match(/:\s*(##BLOCK\d+##)\s*\,?/)[1], arraySelector}
+          d = rest.replace(/:\s*##BLOCK\d+##\s*\,?/, '').trim()
+        } else {
+          throw new Error('osel error')
+        }
+      }
+      return res
+    }
+
+    const dict = {}
+    const root = stack[stack.length-1]
+    for(const {s, id} of stack) {
+      dict[id] = f(s)
+    }
+
+
+    const ksel = {root: dict[root.id], dict}
+    makeKeySelector._caches[s0] = ksel
+    return ksel
+  }
+
+
+  function extractBySelector(obj, ksel){
+    const rec = (target, sel, dict)=>{
+      const o={}
+      for(const [key, s] of Object.entries(sel)) {
+        if(s.arraySelector) {
+          if(!(target[key] instanceof Array))
+            continue
+
+          const arr = []
+          if(s.blockId) {
+            assert(dict[s.blockId])
+            target[key].filter(v=>isobj(v)).forEach(v=>{
+              const o2 = rec(v, dict[s.blockId], dict)
+              if(Object.keys(o2).length)
+                arr.push(o2)
+            })
+
+          } else {
+            /// shallow copy of the array
+            arr.push(...target[key])
+          }
+          o[key] = arr
+
+        } else if(s.blockId) {
+          assert(dict[s.blockId])
+          if(key in target && isobj(target[key])) {
+            const o2 = rec(target[key],dict[s.blockId], dict)
+            o[key] = o2
+          }
+        } else {
+          if(key in target) {
+            o[key] = target[key]
+          }
+        }
+      }
+      return o
+    }
+    const a = rec(obj, ksel.root, ksel.dict)
+    return a
+  }
+
+  function osel(obj, selstr){
+    return extractBySelector(obj, makeKeySelector(selstr))
+  }
+
+  return osel
+})
+
+
+
+function ohas(obj, path){
+  /**
+  e.g.
+    ohas({x: {y:123}}, 'x.y')
+    ohas({x: {y:123}}, 'x.y.z.w')
+    ohas({x: {y:123}}, 'a')
+    ohas({x: {y:123, z:{foo: 'test'}}}, 'x.z.foo')
+  */
+  const ns = path.split('.')
+  let o = obj
+  for(const n of ns) {
+    if(!isobj(o) || !(n in o))
+      return false
+    o = o[n]
+  }
+  return true
+}
+
+
+///
+window.__DEBUG = new Proxy({} ,{
+  /// deny duplication of setting to same property name
+  get(target,prop){ return target[prop] },
+  set(target,prop,value){
+    if(prop in target)
+      // throw new Error('__DEBUG object Error: the property already set: '+prop)
+      console.warn('__DEBUG object Error: the property already set: '+prop)
+    target[prop] = value
+    return true
+  }
+})
+
+__DEBUG._logStack = []
+__DEBUG.log = (...args) => __DEBUG._logStack.push([new Date().toLocaleString(), ...args])
+__DEBUG.showlog = (a=10,b=NaN) => __DEBUG._logStack.concat().reverse().slice(...(isNaN(b) ? [0,a] : [a,b]))
+// __DEBUG.print = (a=10,b=NaN) => __DEBUG.showlog(a,b).forEach(a=>console.log(...a))
+__DEBUG.print = (...args) => __DEBUG.showlog(...args).forEach(a=>console.log(...['%c'+a[0], 'color: #ccc;', ...a.slice(1)]))
+window.p = (...args) => {__DEBUG.print(...args); console.log('%c-- end of log --', 'color: #ccc;'); return ''}
+
+
+
+

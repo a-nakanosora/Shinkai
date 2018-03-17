@@ -1,0 +1,33 @@
+﻿{
+	"name": "Shinkai (standalone)",
+	"description": "a twitter viewer",
+	"version": "0.1",
+
+  "background": {
+    "scripts": ["chrome/shinkai.js"]
+    // ,"persistent": true
+  },
+  "browser_action": {
+    // "default_icon": "icon.png",
+  },
+
+  "options_ui": {
+    "page": "chrome/options.html",
+    "chrome_style": true
+  },
+
+  // "permissions": ["webRequest", "webRequestBlocking", "http://*/*", "https://*/*"],
+  "permissions": ["webRequest", "webRequestBlocking"
+                 , "*://shinkaitauth/*", "*://api.twitter.com/*"
+                 // , "*://pbs.twimg.com/*"
+                 ],
+  // "permissions": ["http://*/*", "https://*/*", "*://*/*"],
+  // "permissions": ["http://*/*", "https://*/*"],
+  // "permissions": [],
+  "content_security_policy": "script-src 'self' 'unsafe-eval'; object-src 'self'",
+  "web_accessible_resources": [
+      "*"
+  ],
+
+	"manifest_version" : 2
+}

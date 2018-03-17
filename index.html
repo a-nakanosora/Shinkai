@@ -1,0 +1,374 @@
+<html>
+<head>
+  <title>Shinkai</title>
+  <meta charset="utf-8"/>
+  <!-- <script src="/lib/vue.js"></script> -->
+  <script src="/lib/vue.min.js"></script>
+  <script src="/mod/utils.js"></script>
+  <script src="/mod/utilstwit.js"></script>
+  <script src="/mod/globalpref.js"></script>
+  <script src="/mod/twfetch.js"></script>
+  <script src="/mod/twapi.js"></script>
+  <script src="/mod/image.js"></script>
+  <script src="/mod/data.js"></script>
+  <script src="/mod/session.js"></script>
+  <link rel="stylesheet" type="text/css" href="./main.css"></link>
+<style>
+</style>
+
+</head>
+<body>
+
+<div id="vueroot">
+
+    <div v-if="!initializeDone" id="initcover">
+      initializing...
+    </div>
+
+
+    <div id="home-message" v-if="initializeDone && !clawled">
+      <div id="home-message--version">
+        Shinkai<br>version: {{version}}
+      </div>
+    </div>
+
+
+
+
+    <div id="views-container">
+      <!-- /// user map view -->
+      <div id="usermapview"
+           ref="usermapview"
+           :class="{ 'tlviewfolded': tlviewfolded
+                   , 'myuserinfo-expanded': showSelfInfo
+                   }"
+           @mousedown="e=>handleUsersViewMouse(e)"
+           @wheel="e=>handleUsersViewWheel(e)"
+           >
+        <div id="usermapview-transform"
+             ref="usermapviewTransform">
+        <template v-for="(u, userorderindex) in ovalues(users)">
+          <!-- /// user panels -->
+          <div :class="{ 'user-unit':true
+                       , 'user-unit--selected': activeUid===u.userId
+                       }"
+               :style="{
+                 position: 'absolute',
+                 'transform-origin': 'center',
+                 transform: `${userTransforms[u.userId] || ''} translate(-24px, -24px)`,
+                 'z-index': 10000-userorderindex,
+               }"
+               :zidxorig="10000-userorderindex"
+               :key="u.userId"
+               @mouseenter="e=>{e.target.style['z-index']=20000}"
+               @mouseleave="e=>{e.target.style['z-index']=e.target.getAttribute('zidxorig')}"
+               >
+            <template v-if="u.screen_name">
+            <div :class="[ 'user-icon',
+                         , {'user-icon--hot': u.tweet_update_state === 'hot'}
+                         , {'user-icon--cool': u.tweet_update_state === 'cool'}
+                         ]">
+
+              <img :src="u.profile_image_url"
+                   :class="[ 'user-icon--thumb'
+                           , {'user-icon--thumb--selected': activeUid===u.userId}
+                           , {'user-icon--thumb--nocustomtransform': noCustomTransformUsers && noCustomTransformUsers[u.userId]}
+                           ]"
+                   :style="{outline: activeUid===u.userId ? `${4/transScale}px double #86c3ff` : ''}"
+                   @mousedown="ev=>handleUserIconMouse(u, ev)"
+                   @load="e=>tweakProfileImage(u, e.target.naturalWidth, e.target.naturalHeight)"
+                   >
+
+              <div v-if="popuptweets[u.userId] && popuptweets[u.userId].length"
+                   class="popuptweet balloon"
+                   :style="{ __opacity: u.tweet_updated ? '1.0' : '.5' }"
+                   >
+                <div v-for="pt in reverse(popuptweets[u.userId])"
+                     class="popuptweet-item"
+                     :style="{ opacity: pt.hot ? '1.0' : '.5' }"
+                     >
+                  <span v-if="pt.extended_entities">
+                    <template v-for="(m, i) in pt.extended_entities.media">
+                      <div class="popuptweet-media-item">
+                        <a :href="imageViewerUrl(m.expanded_url, i)">
+                          <img :src="popuptweetThumbnails[m.media_url] || ''"> </a>
+                      </div>
+                    </template>
+                  </span>
+                  {{pt.bodyText}}
+                </div>
+              </div>
+            </div>
+            <div class="usermapview--user-label">
+              <div class="usermapview--user-label--name">{{u.name}}</div>
+              <div class="user-label--screenname">{{u.screen_name}}</div>
+              <div class="user-inner-data"> {{u.userId}} <br> {{u.date_last_checked || 'no lastdate'}} </div>
+            </div>
+            </template>
+
+            <template v-else>
+            <div class="usermapview--user-label">
+              <div class="usermapview--user-label--name">(not loaded)</div>
+              <div class="user-label--screenname">{{u.userId}}</div>
+              <div class="user-inner-data"> {{u.userId}} {{u.date_last_checked || 'no lastdate'}} </div>
+            </div>
+            </template>
+          </div>
+        </template>
+        </div>
+      </div>
+
+      <!-- /// timeline view -->
+      <div id="tlviewfolder"
+           :class="[{'tlviewfolded': tlviewfolded}, {'hide': !tlUserProfile.userId}]"
+           :style="{'background-color': tlUserProfile.profile_link_color || ''}"
+           @click="e=>tlviewfolded=!tlviewfolded"
+           >
+           <div id="tlviewfolder-inside"></div>
+           </div>
+      <div id="tlview" :class="{'tlviewfolded': tlviewfolded}"
+                       :style="{'background-color': tlUserProfile.tlBackColor || ''}">
+        <div id="tl-user-profile">
+          <div :style="{ width: '100%'
+                       , height: '100px'
+                       , 'background-color': tlUserProfile.profile_link_color
+                       , 'background-size': 'cover'
+                       , 'background-repeat': 'no-repeat'
+                       , 'background-position': 'center center'
+                       , 'background-image': `url(${tlUserProfile.bannerImage || ''})`
+                       }"></div>
+          <div :style="{'background-color': `#${tlUserProfile.profile_link_color}`
+                       , width:'100%'
+                       , height:'25px'
+                       }"></div>
+
+          <div v-if="tlUserProfile.bySingleUser">
+            <div class="user-icon" style="margin: 3px; float: left; z-index: 1;">
+              <a :href="tlUserProfile.profileUrl">
+                <img class="user-icon--thumb" :src="tlUserProfile.profile_image_url"> </a>
+            </div>
+            <div class="user-label">
+              <div class="user-label--name">{{tlUserProfile.name}}</div>
+              <div class="user-label--screenname">{{tlUserProfile.userScreenName}}</div>
+              <div class="user-label--description">{{tlUserProfile.description}}</div>
+              <div class="user-inner-data">following: {{tlUserProfile.friends_count}}</div>
+            </div>
+            <div style="clear:both;"></div>
+          </div>
+
+
+        </div>
+        <div id="articles" :style="{'will-change': !tlviewfolded ? 'transform' : ''}">
+          <div v-for="a in tl" class="tlarticle">
+            <div class="tlarticle--date"
+                 :style="{color: tlUserProfile.tlUniqueColor || ''}"
+                 >
+              {{new Date(a.created_at).toLocaleString()}}
+            </div>
+
+            <div class="tlarticle--userdisplay" v-if="!tlUserProfile.bySingleUser">
+              <div><img :src="a.userProfileImageUrl" class="user-icon--thumb"></div>
+              <div>{{a.userScreenName}}</div>
+            </div>
+
+            <div class="tlarticle--retweetstat"
+                 v-if="a.retweeted_status && a.retweeted_status.user">
+            <template v-for="ru in [a.retweeted_status.user]">
+              <div class="tlarticle--retweetstat--userdisplay">
+                <span class="vm tlarticle--retweetstat--userdisplay--rtmark">RT</span>
+                <img class="vt user-icon--thumb" :src="ru.profile_image_url">
+                <span class="vm user-label--name">{{ru.name}}</span>
+                <span class="vm user-label--screenname">{{ru.screen_name}}</span>
+              </div>
+            </template>
+            </div>
+
+            <div class="tlarticle--body">
+              <div class="tlarticle--bodytext">
+                <div v-for="s in a.bodyText.split(/\n/g)">
+                  {{s}}
+                </div>
+              </div>
+
+
+              <template v-if="a.retweeted_status && a.retweeted_status.extended_entities">
+                <div v-for="(m,i) in a.retweeted_status.extended_entities.media"
+                     class="tlarticle-media-item">
+                  <a :href="imageViewerUrl(m.expanded_url, i)">
+                    <img :src="m.media_url"> </a>
+                </div>
+              </template>
+              <template v-else-if="a.extended_entities">
+                <div v-for="(m,i) in a.extended_entities.media"
+                     class="tlarticle-media-item">
+                  <a :href="imageViewerUrl(m.expanded_url, i)">
+                    <img :src="m.media_url"> </a>
+                </div>
+              </template>
+            </div>
+
+
+
+            <a class="tlarticle-permalink" :href="permalinkUrl(a)" @click="permalinkClicked"></a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+
+
+
+    <div id="myuserinfo" :class="{'myuserinfo-expanded': showSelfInfo, 'tlview-expanded': !tlviewfolded, 'myuserinfo--in-pseudo': pseudoMyself}">
+        <!-- /// myself user panel -->
+        <div id="myuserinfo-left" :class="{'hide': !myself}">
+          <div v-if="myself" :class="['myself--user-unit', {'myself--user-unit--minified': !showSelfInfo}]">
+            <div class="user-icon"
+                 @click="()=>{showSelfInfo = !showSelfInfo}">
+              <img :src="(pseudoMyself || myself).profile_image_url"
+                   :class="[{'user-icon--minified': !showSelfInfo}]">
+            </div>
+            <div :class="['user-label', {'hide': !showSelfInfo}, 'no-pointevents']"
+                 style="height: 0; width: 0;">
+                <div class="user-label--name">{{(pseudoMyself || myself).name}}</div>
+                <div class="user-label--screenname">{{(pseudoMyself || myself).screen_name}}</div>
+                <div class="user-inner-data"> {{(pseudoMyself || myself).userId}} </div>
+            </div>
+          </div>
+        </div>
+        <div id="myuserinfo-right" :class="{'hide': !myself}">
+          <div :class="{'hide': !showSelfInfo}">
+            <div>
+              <div id="ops">
+                <div class="row">
+                  <div class="col tc">
+                    <input type="checkbox"
+                           id="cb-clawl"
+                           @click="e=>switchAutoClawler(e.target.checked)"
+                           :checked="enabledAutoClawlEachUser && enabledAutoClawlHome"
+                           :disabled="isProcessing"
+                           > <label for="cb-clawl" class="cb-onoff"> clawl </label>
+                    <div :class="{'transp': !(enabledAutoClawlEachUser && enabledAutoClawlHome)
+                                             || status || statusDissolve || isProcessing
+                                 }"
+                         style="white-space: normal; font-size: 0.6rem; text-align: center; color: #53547a82; height: 0; line-height: 0.5rem;"
+                         > auto <br> clawl <br> enabled </div>
+                  </div>
+                  <div class="col">
+                    <button @click="loadHomeTimeline" :disabled="isProcessing">show home</button>
+                  </div>
+                  <div class="col">
+                    <button @click="cooldownUsers" :disabled="isProcessing">cool down</button>
+                  </div>
+                  <div class="col">
+                  </div>
+                  <div class="col">
+                    sort mode: <input type="checkbox"
+                                      id="cb-mapsortmode"
+                                      @click="e=>toggleUsermapSortingMode(e.target.checked)"
+                                      :checked="usermapSortingMode === 'custom'"
+                                      > <label for="cb-mapsortmode"> {{usermapSortingMode}} </label>
+                  </div>
+                  <div class="col">
+                    <button @click="resetView">reset view</button>
+                  </div>
+                  <div id="submenu-container" class="col" style="padding-left: 100px;">
+
+                    <button class="submenu-opener"
+                            @click="e=>{
+                              showSubmenu = !showSubmenu;
+                              handleDropdownMenuFocusOut(e, '#submenu-container', ()=> showSubmenu = false)
+                            }">▼</button>
+                    <div :class="{'submenu-panel':true, 'transp': !showSubmenu}">
+                      <div class="submenu--row">
+                        navigation mode: <input type="checkbox" id="cb-navimode" v-model="useSailMove">
+                        <label for="cb-navimode"> {{ useSailMove ? 'sail' : 'drag' }} </label>
+                      </div>
+
+                      <div class="submenu--row"> <button @click="markAsReadUsers"
+                                                         :disabled="isProcessing">mark as read</button> </div>
+                      <div class="submenu--row"> <button @click="refreshFriendsUsers"
+                                                         :disabled="isProcessing">refreshUsers</button> </div>
+                      <div class="submenu--row submenu--row--separator"></div>
+                      <div class="submenu--row"> <button @click="loadBoundedTimeline"
+                                                         :disabled="isProcessing">show bounded timeline</button> </div>
+                      <div class="submenu--row submenu--row--separator"></div>
+                      <div class="submenu--row"> <button @click="beginPseudoMyselfOnActiveUser"
+                                                         :disabled="isProcessing">begin pseudo home</button> </div>
+                    </div>
+
+
+                  </div>
+                  <div class="col">
+                    <button @click="endPseudoMyself"
+                            :disabled="isProcessing"
+                            v-if="!!pseudoMyself">end pseudo home</button>
+                  </div>
+                </div>
+
+                <div :class="['inside-ops', 'row', {'hide': !showInsideMethod}]">
+                  <div class="col">
+                    <button @click="runClawlerEachUser" :disabled="isProcessing">clawl each user</button>
+                    <button @click="runClawlerHomeTL" :disabled="isProcessing">clawl home</button>
+                    <button @click="clawlBlahBlah" :disabled="isProcessing">clawl</button>
+                  </div>
+
+                  <div>
+                    <label> <input type="checkbox"
+                                   v-model="enabledAutoClawlEachUser"> auto clawl each user </label>
+                    <br>
+                    <label> <input type="checkbox"
+                                   v-model="enabledAutoClawlHome"> auto clawl home </label>
+                  </div>
+                </div>
+
+                <div id="status-messages">
+                  <div>{{status}}</div>
+                  <div>{{statusDissolve}}</div>
+                  <div ref="statusImgGen"></div>
+
+                  <div class="status-processing" v-if="isProcessing">
+                    <div class="processcircle"><div class="processcircle-inner"></div></div>
+                    <span class="vt"> processing... </span>
+                  </div>
+
+                  <div class="status-error-message">{{twitterApiErrorMessage}}</div>
+                  <div class="status-error-message">{{generalErrorMessages.join('\n')}}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="status-processing2"
+               v-if="isProcessing && !showSelfInfo">
+              <div class="processcircle"><div class="processcircle-inner"></div></div>
+              <span class="vt"> processing... </span>
+          </div>
+          <div class="status-processing2-error"
+               v-else-if="(twitterApiErrorMessage || generalErrorMessages.length) && !showSelfInfo">
+          </div>
+
+        </div>
+        <div v-if="initializeDone && (!accessToken || !accessTokenSecret)"
+             style="display: none;"
+             :class="{'showforce': initializeDone && (!accessToken || !accessTokenSecret)}"
+             >
+          <button @click="loginWithTwitter">login with twitter account</button>
+        </div>
+    </div>
+
+
+
+    <div id="apikeywarning" v-if="initializeDone && showWarningKeysNotSet">
+      <span>API keys not set. <br>
+      Check <a href="/" @click="openExtensionOption">Shinkai options</a> to set the keys.</span>
+    </div>
+
+</div>
+
+
+  <script src="./main.js"></script>
+</body>
+</html>
+
+
