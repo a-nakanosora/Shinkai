@@ -11,6 +11,7 @@ function incrementStrId(id_str, digit=0){
   */
   assert(typeof id_str === 'string')
   assert(id_str.split('').every(c=>!isNaN(c)))
+  assert(id_str[0]!=='0')
   assert(typeof digit === 'number' && 0<=digit)
   const l = id_str.length
   if(digit === l)
@@ -25,6 +26,25 @@ function incrementStrId(id_str, digit=0){
     return b.slice(0, l-1-i) + String(c+1) + (-i<=-1 ? b.slice(-i) : '')
   else
     return incrementStrId(b.slice(0, l-1-i) + String(0) + (-i<=-1 ? b.slice(-i) : ''), digit+1)
+}
+function decrementStrId(id_str, digit=0){
+  assert(typeof id_str === 'string')
+  assert(id_str.split('').every(c=>!isNaN(c)))
+  assert(id_str[0]!=='0')
+  assert(typeof digit === 'number' && 0<=digit)
+  const l = id_str.length
+  if(digit === l)
+    return '1'+id_str
+  else if(digit > l)
+    throw new Error(`decrementStrId error: invalid digit: ${digit} / ${id_str}`)
+
+  const b=id_str
+  const i=digit
+  const c = Number( b.slice(l-1-i,l-i) )
+  if(c>0)
+    return (b.slice(0, l-1-i) + String(c-1) + (-i<=-1 ? b.slice(-i) : '')).replace(/^0+/, '')
+  else
+    return (decrementStrId(b.slice(0, l-1-i) + String(9) + (-i<=-1 ? b.slice(-i) : ''), digit+1)).replace(/^0+/, '')
 }
 
 

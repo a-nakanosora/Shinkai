@@ -127,7 +127,10 @@
            <div id="tlviewfolder-inside"></div>
            </div>
       <div id="tlview" :class="{'tlviewfolded': tlviewfolded}"
-                       :style="{'background-color': tlUserProfile.tlBackColor || ''}">
+                       :style="{'background-color': tlUserProfile.tlBackColor || ''}"
+                       @scroll="ui_autoExtendTimeline"
+                       ref="tlview"
+                       >
         <div id="tl-user-profile">
           <div :style="{ width: '100%'
                        , height: '100px'
@@ -212,6 +215,20 @@
             <a class="tlarticle-permalink" :href="permalinkUrl(a)" @click="permalinkClicked"></a>
           </div>
         </div>
+
+        <!-- <div v-if="tlUserProfile.tlType==='home'"
+             @click="ui_loadHomeTimelineNextPage">
+          read more
+        </div> -->
+        <div id="tlreadmore"
+             v-if="['home', 'user', 'bounded'].includes(tlUserProfile.tlType) && tl.length"
+             @click="e=> loadTimelineNextPage(tlUserProfile.tlType)"
+             :style="{'background': '#'+tlUserProfile.profile_link_color}"
+             ref="tlreadmore"
+             >
+          read more
+        </div>
+
       </div>
     </div>
 
@@ -255,7 +272,7 @@
                          > auto <br> clawl <br> enabled </div>
                   </div>
                   <div class="col">
-                    <button @click="loadHomeTimeline" :disabled="isProcessing">show home</button>
+                    <button @click="ui_loadHomeTimeline" :disabled="isProcessing">show home</button>
                   </div>
                   <div class="col">
                     <button @click="cooldownUsers" :disabled="isProcessing">cool down</button>
@@ -290,17 +307,17 @@
                       <div class="submenu--row"> <button @click="refreshFriendsUsers"
                                                          :disabled="isProcessing">refreshUsers</button> </div>
                       <div class="submenu--row submenu--row--separator"></div>
-                      <div class="submenu--row"> <button @click="loadBoundedTimeline"
+                      <div class="submenu--row"> <button @click="ui_loadBoundedTimeline"
                                                          :disabled="isProcessing">show bounded timeline</button> </div>
                       <div class="submenu--row submenu--row--separator"></div>
-                      <div class="submenu--row"> <button @click="beginPseudoMyselfOnActiveUser"
+                      <div class="submenu--row"> <button @click="ui_beginPseudoMyselfOnActiveUser"
                                                          :disabled="isProcessing">begin pseudo home</button> </div>
                     </div>
 
 
                   </div>
                   <div class="col">
-                    <button @click="endPseudoMyself"
+                    <button @click="ui_endPseudoMyself"
                             :disabled="isProcessing"
                             v-if="!!pseudoMyself">end pseudo home</button>
                   </div>
@@ -309,7 +326,7 @@
                 <div :class="['inside-ops', 'row', {'hide': !showInsideMethod}]">
                   <div class="col">
                     <button @click="runClawlerEachUser" :disabled="isProcessing">clawl each user</button>
-                    <button @click="runClawlerHomeTL" :disabled="isProcessing">clawl home</button>
+                    <button @click="ui_runClawlerHomeTL" :disabled="isProcessing">clawl home</button>
                     <button @click="clawlBlahBlah" :disabled="isProcessing">clawl</button>
                   </div>
 

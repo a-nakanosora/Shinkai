@@ -258,6 +258,15 @@ button:focus {
 #tlviewfolder.tlviewfolded #tlviewfolder-inside {
   background-color: #d7dadcde;
 }
+#tlreadmore {
+  width: 100%;
+  height: 3rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #afafaf;
+  background: #858c92;
+}
 .user-unit {
   position: relative;
   display: inline-block;

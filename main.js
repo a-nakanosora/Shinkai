@@ -1,10 +1,11 @@
 'use strict'
-const Version = {version: 'alpha20180317'}
+const Version = {version: 'alpha20180319a'}
 const Pref = {
   parallelConnection: 10,
   clawlEachUserMaxProcess: 100,
   refreshUserMaxProcess: 500,
   boundedTimelineMaxUsers: 200,
+  generateTimelineBlockSize: 10,
 
   spiralCoef: {radius:32, h:2.0, offset:.7},
 
@@ -79,7 +80,9 @@ const app = new Vue({
     */
 
     tlUserProfile: {},
-    tlHomeRaw_: [],
+    tlRawHome: [],
+    tlRaw: [],
+    cursorTl: 0,
 
     popuptweets: {},
     /**
@@ -256,7 +259,7 @@ const app = new Vue({
             tb = Date.now()
           }
         }
-      }, 7*1000)
+      }, 3*1000)
     },
 
     activateThumbnailGenerator(){
@@ -508,6 +511,16 @@ const app = new Vue({
       this._cleanRefreshFriendsUsersRequests()
       this.sortUsers()
     },
+    async ui_beginPseudoMyselfOnActiveUser(){
+      this.switchAutoClawler(false)
+      this.dateLastClawlEachUser = 0
+      await this.beginPseudoMyselfOnActiveUser()
+    },
+    async ui_endPseudoMyself(){
+      this.switchAutoClawler(false)
+      this.dateLastClawlEachUser = 0
+      await this.endPseudoMyself()
+    },
 
     async handleUserIconMouse(user, ev){
       this.activeUid = user.userId
@@ -563,7 +576,7 @@ const app = new Vue({
           }
         } else {
           /// click user icon
-          this.loadUserTimeline(user.userId)
+          this.ui_loadUserTimeline(user.userId)
           const u = user
           u.tweet_update_state = ''
           u.tweet_updated = false
@@ -599,31 +612,48 @@ const app = new Vue({
       document.addEventListener('mousedown', f)
     },
 
-    async refreshHomeTimeline(){
-      await this.loadHomeTimeline({showTlView:false})
+    setTlProfile(tlType, profile={}){
+      assert(['home', 'user', 'bounded', 'none'].includes(tlType))
+      const tlUserProfile = Object.freeze({
+        tlType,
+        ...osel(profile, `
+          bySingleUser,
+          userId, name, description,
+          profile_link_color, profile_image_url, friends_count,
+          userScreenName,
+          tlBackColor,
+          tlUniqueColor,
+          bannerImage,
+          `),
+      })
+      this.tlUserProfile = tlUserProfile
     },
-    async loadHomeTimeline({showTlView=true}={}){
+    async ui_loadHomeTimeline({showTlView=true}={}){
+      if(this.tlUserProfile.tlType === 'home') {
+        this.tlviewfolded = false
+        return await lag()
+      }
+
+      await this.loadHomeTimeline()
+      await this.ui_resetTimelineScroll()
+      await this.loadTimelineNextPage(this.tlUserProfile.tlType)
+      if(showTlView)
+        this.tlviewfolded = false
+    },
+    async loadHomeTimeline(){
       if(!this.myself)
         return
 
-      if(!this.tlHomeRaw_.length) {
+      if(!this.tlRawHome.length) {
         await this.runClawlerHomeTL()
-        if(!this.tlHomeRaw_.length)
-          return
+        if(!this.tlRawHome.length)
+          return console.warn('loadHomeTimeline Warning: could not get home timeline.')
       }
+      assert(this.tlRawHome.every(tRaw=>!!tRaw.user))
 
-      assert(this.tlHomeRaw_.every(tRaw=>!!tRaw.user))
-      const tl = this.tlHomeRaw_.map(tRaw=>{
-        const u = TwData.user(tRaw.user)
-        const t =TwData.tltweet(tRaw, { userId: u.userId
-                                    , userScreenName:u.screen_name
-                                    , userProfileImageUrl:u.profile_image_url
-                                    })
-        return t
-      })
-      this.tl = tl
-      this.tlUserProfile = {
-        tlType: 'home',
+
+      this.cursorTl = 0
+      this.setTlProfile('home', {
         bySingleUser: false,
         ...osel(this.myself, `
           userId, name, description,
@@ -633,24 +663,30 @@ const app = new Vue({
         tlBackColor: lerpHexColor(this.myself.profile_link_color, 'ffffff', .8),
         tlUniqueColor: lerpHexColor(this.myself.profile_link_color, '000000', .5),
         bannerImage: this.myself.profile_banner_url ? `${this.myself.profile_banner_url}/300x100` : '',
-      }
-
-      if(showTlView)
-        this.tlviewfolded = false
+      })
+    },
+    async ui_loadUserTimeline(userId){
+      await this.ui_resetTimelineScroll()
+      await this.loadUserTimeline(userId)
     },
     async loadUserTimeline(userId){
+      this.clearErrorMessages()
+      let user
       const err = await handleTwErrorAll2(async _=>{
-        this.tl = []
-        const user = await TwApi.getUserInfo({user_id:userId})
-        const uo = TwData.user(user)
+        user = await TwApi.getUserInfo({user_id:userId})
+      })
 
+      if(err){
+        this.notifyHandledError('loadUserTimeline', err)
+        this.setTlProfile('none')
+        this.generateTimelineDisplayEmpty()
+      } else {
+        const u = TwData.user(user)
         if(this.users[userId])
-          this.refreshUser(userId, uo)
-
-        const { profile_link_color, profile_banner_url, screen_name} = uo
-        const tlUserProfile = {
-          tlType: 'user',
-          ...osel(uo, `
+          this.refreshUser(userId, u)
+        const { profile_link_color, profile_banner_url, screen_name} = u
+        this.setTlProfile('user', {
+          ...osel(u, `
             userId, profile_image_url, profile_link_color, description,
             name, friends_count,
             `),
@@ -661,36 +697,20 @@ const app = new Vue({
           tlBackColor: lerpHexColor(profile_link_color, 'ffffff', .8),
           tlUniqueColor: lerpHexColor(profile_link_color, '000000', .5),
           bySingleUser: true,
-        }
-        this.tlUserProfile = tlUserProfile
+        })
+        this.tlRaw = []
+        this.tlviewfolded = false
 
-
-        // const res = await TwApi.getUserTimeline({user_id:userId, count:20, trim_user:true})
-        const res = await TwApi.getUserTimeline({user_id:userId, count:20, trim_user:false})
-        __DEBUG.log('getUserTimeline', res)
-        if(cannotViewUserTimeline(res)) {
-          this.tl = [{
-            created_at: Date.now(),
-            text: 'These Tweets are protected.',
-            id_str: "",
-            userId, userScreenName:screen_name,
-          }]
-        } else {
-          const tl = res.map(a=>TwData.tltweet(a, {userId, userScreenName:screen_name}))
-          this.tl = tl
-        }
-      })
-
-      if(err){
-        this.notifyHandledError('loadUserTimeline', err)
-        this.tlUserProfile = {}
-        this.tl = []
-      } else
-          this.clearErrorMessages()
-
-      this.tlviewfolded = false
+        ///
+        // await this.appendTimelineNextPage(u, null)
+        await this.loadTimelineNextPage('user')
+      }
     },
 
+    async ui_loadBoundedTimeline(){
+      await this.ui_resetTimelineScroll()
+      await this.loadBoundedTimeline()
+    },
     async loadBoundedTimeline(){
       if(this.isProcessing)
         return
@@ -706,7 +726,7 @@ const app = new Vue({
         return await lag()
       }
 
-      const tl = []
+      const tlRaw = []
       const uidsBlocks = eachSlice(uids, Pref.parallelConnection)
       for(const block of uidsBlocks) {
         /// todo: error handling
@@ -721,22 +741,12 @@ const app = new Vue({
           __DEBUG.log('loadBoundedTimeline2', tweets)
           if(!tweets.length)
             continue
-
-          const u = tweets[0].user
-          assert(u && u.screen_name)
-          const screen_name = u.screen_name
-          tl.push(...tweets.map(t=> TwData.tltweet(t, {
-                userId:uid
-              , userScreenName:screen_name
-              , userProfileImageUrl:u.profile_image_url
-              }) ))
+          tlRaw.push(...tweets)
         }
       }
+      this.tlRaw = tlRaw
 
-      tl.sort((a,b)=> new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      this.tl = tl
-      this.tlUserProfile = {
-        tlType:'bounded',
+      this.setTlProfile('bounded', {
         bySingleUser: false,
         userId: '123',
         userScreenName:'',
@@ -748,10 +758,120 @@ const app = new Vue({
         profile_image_url:'',
         description:'',
         profileUrl: '', bannerImage: '',
-      }
-      this.tlviewfolded = false
+      })
+      this.loadTimelineNextPage(this.tlUserProfile.tlType)
 
+
+      this.tlviewfolded = false
       this.isProcessing = false
+    },
+
+    async loadTimelineNextPage(tlType){
+      assert(['home', 'user', 'bounded'].includes(tlType))
+      assert(tlType === this.tlUserProfile.tlType)
+      this.clearErrorMessages()
+      const count = Pref.generateTimelineBlockSize
+      const begin = 0
+      const end = this.cursorTl + count
+      let tlRaw = $switch2(tlType, {'home':this.tlRawHome, 'user':this.tlRaw, 'bounded':this.tlRaw})
+      if(end > tlRaw.length){
+        const tlRaw2 = await this.getTimelineNextPage(tlType)
+        if(!tlRaw2) {
+          // throw new Error('loadTimelineNextPage: errors inside getTimelineNextPage.')
+          console.warn('loadTimelineNextPage Warning: errors inside getTimelineNextPage.')
+          return
+        }
+
+        if(cannotViewUserTimeline(tlRaw2)) {
+          this.generateTimelineDisplayCannotView()
+          return
+        }
+
+        tlRaw = $switch2(tlType, {
+          'home': _=> this.tlRawHome = this.tlRawHome.concat(tlRaw2),
+          'user': _=> this.tlRaw = this.tlRaw.concat(tlRaw2),
+          'bounded': _=> this.tlRaw = this.tlRaw.concat(tlRaw2),
+        })
+      }
+      const end2 = Math.min(end, tlRaw.length)
+      this.cursorTl = end2
+      this.generateTimelineDisplay(tlRaw, begin, end2)
+    },
+    async getTimelineNextPage(tlType){
+      assert(['home', 'user', 'bounded'].includes(tlType))
+      assert(tlType === this.tlUserProfile.tlType)
+      // assert(this.tlUserProfile.tlType === 'home')
+      const maxId = this.tl.length ? arrlast(this.tl).tweetId : null
+      assert(typeof maxId === 'string' || maxId === null)
+
+      let tweetsRaw0
+      const err = await handleTwErrorAll2(async _=>{
+        tweetsRaw0 = await $switch2(tlType, {
+          'home': async _=> TwApi.getHomeTimeline({
+              count:200,
+              exclude_replies: false,
+              max_id: maxId ? decrementStrId(maxId, 0) : null,
+            }),
+          'user': async _=> TwApi.getUserTimeline({
+              user_id:this.tlUserProfile.userId,
+              // count:50,
+              count:20,
+              trim_user:false,
+              max_id: maxId ? decrementStrId(maxId, 0) : null,
+            }),
+          'bounded': [], /// temp
+        })
+      })
+
+      if(err) {
+        this.notifyHandledError('getTimelineNextPage', err)
+        return null
+      }
+      return tweetsRaw0
+    },
+    generateTimelineDisplay(tlRaw, begin, end){
+      assertype(tlRaw, 'Array')
+      assertype(begin, 'Number')
+      assertype(end, 'Number')
+      assert(tlRaw.every(t=>!!t.user))
+      begin = Math.max(begin, 0)
+      end = Math.min(end, tlRaw.length)
+
+      const tl = tlRaw.slice(begin, end).map(a=>{
+          // const user = {userId:'123', screen_name:'temp'}
+          const user = TwData.user(a.user)
+          return TwData.tltweet(a, { userId: user.userId
+                            , userScreenName: user.screen_name
+                            , userProfileImageUrl: user.profile_image_url
+                            })
+        })
+        .sort((a,b)=> new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      this.tl = tl
+    },
+    generateTimelineDisplayCannotView(){
+      this.tl = [{
+        created_at: Date.now(),
+        text: 'These Tweets are protected.',
+        id_str: '',
+        ...osel(this.tlUserProfile, `userId, userScreenName`),
+      }]
+    },
+    generateTimelineDisplayEmpty(){
+      this.tl = []
+    },
+    async ui_resetTimelineScroll(){
+      this.generateTimelineDisplayEmpty()
+      this.$forceUpdate()
+      await sleep(100)
+    },
+    ui_autoExtendTimeline(e){
+      if(!this.$refs.tlview || !this.$refs.tlreadmore)
+        return
+      const rect = this.$refs.tlview.getClientRects()[0]
+      const rect2 = this.$refs.tlreadmore.getClientRects()[0]
+
+      if( isVisibleRectIn(rect, rect2) )
+        this.loadTimelineNextPage(this.tlUserProfile.tlType)
     },
 
     async switchAutoClawler(enabled){
@@ -813,8 +933,8 @@ const app = new Vue({
               trim_user: true,
               exclude_replies: Pref.excludeRepliesOnClawl,
               // include_rts: true,
-              ...(u.last_tweet_id && !(Pref.alwaysShowAllClawlTlAtFirst && this.firstClawlEachUser)
-                   ? {since_id: incrementStrId(u.last_tweet_id, 2)}  : {}),
+              since_id: (u.last_tweet_id && !(Pref.alwaysShowAllClawlTlAtFirst && this.firstClawlEachUser))
+                          ? incrementStrId(u.last_tweet_id, 0)  : null,
             }) ) )
 
           for(const [u, tweetsRaw0] of zip(block,b)) {
@@ -889,11 +1009,9 @@ const app = new Vue({
       this.isProcessing = true
       this.twitterApiErrorMessage = ''
 
-      let res
+      let tweetsRaw0
       const err = await handleTwErrorAll2(async _=>{
-        const usersNext = this.users
-
-        res = await TwApi.getHomeTimeline({
+        tweetsRaw0 = await TwApi.getHomeTimeline({
           // count:10,
           // count:100,
           count:200,
@@ -902,7 +1020,7 @@ const app = new Vue({
           // exclude_replies: true, /// test
           exclude_replies: false,
           // include_rts: true,
-          since_id: this.homeLastTweetId ? incrementStrId(this.homeLastTweetId, 2) : null,
+          since_id: this.homeLastTweetId ? incrementStrId(this.homeLastTweetId, 0) : null,
         })
       })
 
@@ -912,9 +1030,9 @@ const app = new Vue({
       else {
         this.clearErrorMessages()
 
-        __DEBUG.log('clawl home tweets', res)
-        this.tlHomeRaw_ = res.concat(this.tlHomeRaw_)
-        const tweetsRaw = res.filter(t=>t.user.id_str !== this.myself.userId)
+        __DEBUG.log('clawl home tweets', tweetsRaw0)
+        this.tlRawHome = tweetsRaw0.concat(this.tlRawHome)
+        const tweetsRaw = tweetsRaw0.filter(t=>t.user.id_str !== this.myself.userId)
 
         const tweetsEachUser = {}
         for(const t of tweetsRaw) {
@@ -969,8 +1087,8 @@ const app = new Vue({
           }
         }
 
-        if(tweetsRaw.length)
-          this.homeLastTweetId = tweetsRaw[0].id_str
+        if(this.tlRawHome.length)
+          this.homeLastTweetId = this.tlRawHome[0].id_str
       }
 
 
@@ -979,11 +1097,14 @@ const app = new Vue({
       this.sortUsers()
 
       if(this.tlUserProfile.tlType === 'home')
-        await this.refreshHomeTimeline()
+        await this.generateTimelineDisplay(this.tlRawHome, 0, this.cursorTl)
 
       this.$forceUpdate() ///
 
       this.saveUsersToStorage()
+
+    },
+    async ui_runClawlerHomeTL(){
 
     },
 
@@ -1380,4 +1501,14 @@ function getUsersByBound(userTransforms, rect, viewTransform, margin=0){
   return Object.keys(ps2)
 }
 
-
+function containedIn(rect, p){
+  const {x:px,y:py} = p
+  const {x,y,width,height} = rect
+  return x<=px && px<x+width && y<=py && py<y+height
+}
+function isVisibleRectIn(rectWindow, rect){
+  const {x,y,width,height} = rect
+  const r = x+width
+  const b = y+height
+  return [{x,y},{x:r,y},{x,y:b},{x:r,y:b}].some(p=> containedIn(rectWindow, p))
+}

@@ -24,6 +24,10 @@ function eachSlice(arr, size){
   return a
 }
 
+function arrlast(arr){
+  return arr.length ? arr[arr.length-1] : null
+}
+
 function arrRemoved(arr, v){
   let a = arr.concat()
   let i
@@ -39,6 +43,67 @@ function assert(b,msg='',obj=null){
     throw new Error(msg ? 'Assertion Error: '+msg : 'Assertion Error.')
   }
 }
+
+function assertype(v, type, msg='', obj=null){
+  /// assertype(123, 'Number')
+  /// assertype(null, 'Number')
+  /// assertype(null, 'Number?')
+  assert(typeof type === 'string')
+  let nullable = false
+  if(type.endsWith('?')) {
+    nullable = true
+    type = type.slice(0,-1)
+  }
+  const b = (nullable && v===null) || (
+              type==='Object' ? isobj(v)
+              : type==='Array' ? v instanceof Array
+              : type==='String' ? typeof v === 'string'
+              : type==='Number' ? typeof v === 'number'
+              : null)
+  if(b===null)
+    throw new Error(`assertype Error: invalid type: ${type}`)
+  if(!b) {
+    /*const s = `assertype Assertion Error: \`${
+                 typeof v === 'string' ? '"'+v+'"' : String(v)
+                 }\` is not a \`${type}\``*/
+    const s = 'assertype Assertion Error'
+    console.error('assertype Assertion Error:', typeof v === 'string' ? '"'+v+'"' : v, 'is not a', type)
+    if(obj)
+      console.warn(...[s+':', msg, obj].filter(v=>!!v))
+    throw new Error(msg ? s+': '+msg : s+'.')
+  }
+}
+
+function $switch(n, o){
+  /**
+  e.g.
+    $switch("x", {x:123, y:_=>456, default:789})
+  e.g.
+    void async function(){
+      console.log(1)
+      const res = await $switch2('x', {
+          x: async _=>{
+            console.log("a")
+            await sleep(1000)
+            console.log("b")
+            return 123
+          },
+        })
+      console.log(2, res)
+    }()
+  */
+  const a = n in o ? o[n] : 'default' in o ? o['default'] : null
+  if(!a)
+    return null
+  return typeof a === 'function' ? a() : a
+}
+function $switch2(n,o){
+  if(!(n in o))
+    throw new Error('$switch2 Error: invalid key: '+n)
+  return $switch(n,o)
+}
+
+
 
 function sleep(interval){
   return new Promise(ok=>setInterval(ok, interval))
