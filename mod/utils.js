@@ -44,10 +44,10 @@ function assert(b,msg='',obj=null){
   }
 }
 
-function assertype(v, type, msg='', obj=null){
-  /// assertype(123, 'Number')
-  /// assertype(null, 'Number')
-  /// assertype(null, 'Number?')
+function istype(v, type){
+  /// istype(123, 'Number')
+  /// istype(null, 'Number')
+  /// istype(null, 'Number?')
   assert(typeof type === 'string')
   let nullable = false
   if(type.endsWith('?')) {
@@ -55,14 +55,20 @@ function assertype(v, type, msg='', obj=null){
     type = type.slice(0,-1)
   }
   const b = (nullable && v===null) || (
-              type==='Object' ? isobj(v)
-              : type==='Array' ? v instanceof Array
-              : type==='String' ? typeof v === 'string'
-              : type==='Number' ? typeof v === 'number'
-              : null)
+            type==='Object' ? isobj(v)
+            : type==='Array' ? v instanceof Array
+            : type==='String' ? typeof v === 'string'
+            : type==='Number' ? typeof v === 'number'
+            : null)
   if(b===null)
-    throw new Error(`assertype Error: invalid type: ${type}`)
-  if(!b) {
+    throw new Error(`istype Error: invalid type: ${type}`)
+  return b
+}
+function assertype(v, type, msg='', obj=null){
+  /// assertype(123, 'Number')
+  /// assertype(null, 'Number')
+  /// assertype(null, 'Number?')
+  if(!istype(v,type)) {
     /*const s = `assertype Assertion Error: \`${
                  typeof v === 'string' ? '"'+v+'"' : String(v)
                  }\` is not a \`${type}\``*/
@@ -109,6 +115,20 @@ function sleep(interval){
   return new Promise(ok=>setInterval(ok, interval))
 }
 const lag = ()=>sleep(1)
+
+function* pairs(arr){
+  if(arr.length <= 1)
+      throw new Error('pairs Error: no pairs.')
+
+  for(let i=0, l=arr.length; i<l-1; i++)
+      yield [arr[i], arr[i+1]]
+}
+
+function tips(arr){
+    if(arr.length === 0)
+        throw new Error('tips Error: 0 length.')
+    return [arr[0], arr[arr.length-1]]
+}
 
 function* zip(a,b){
   const l = Math.min(a.length, b.length)

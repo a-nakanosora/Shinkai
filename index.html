@@ -10,6 +10,7 @@
   <script src="/mod/twfetch.js"></script>
   <script src="/mod/twapi.js"></script>
   <script src="/mod/image.js"></script>
+  <script src="/mod/shape.js"></script>
   <script src="/mod/data.js"></script>
   <script src="/mod/session.js"></script>
   <link rel="stylesheet" type="text/css" href="./main.css"></link>
@@ -56,9 +57,9 @@
                  position: 'absolute',
                  'transform-origin': 'center',
                  transform: `${userTransforms[u.userId] || ''} translate(-24px, -24px)`,
-                 'z-index': 10000-userorderindex,
+                 'z-index': usersSortedOrder[u.userId],
                }"
-               :zidxorig="10000-userorderindex"
+               :zidxorig="usersSortedOrder[u.userId]"
                :key="u.userId"
                @mouseenter="e=>{e.target.style['z-index']=20000}"
                @mouseleave="e=>{e.target.style['z-index']=e.target.getAttribute('zidxorig')}"
@@ -84,14 +85,16 @@
                    :style="{ __opacity: u.tweet_updated ? '1.0' : '.5' }"
                    >
                 <div v-for="pt in reverse(popuptweets[u.userId])"
-                     class="popuptweet-item"
-                     :style="{ opacity: pt.hot ? '1.0' : '.5' }"
-                     >
+                     :class="[ 'popuptweet-item'
+                             , {'popuptweet-item--rt': !!pt.retweeted_status}
+                             , {'popuptweet-item--nothot': !pt.hot}
+                             ]">
                   <span v-if="pt.extended_entities">
                     <template v-for="(m, i) in pt.extended_entities.media">
                       <div class="popuptweet-media-item">
                         <a :href="imageViewerUrl(m.expanded_url, i)">
-                          <img :src="popuptweetThumbnails[m.media_url] || ''"> </a>
+                          <!-- <img :src="popuptweetThumbnails[m.media_url] || ''"> </a> -->
+                          <img :src="m.media_url+':thumb'"> </a>
                       </div>
                     </template>
                   </span>
@@ -128,7 +131,7 @@
            </div>
       <div id="tlview" :class="{'tlviewfolded': tlviewfolded}"
                        :style="{'background-color': tlUserProfile.tlBackColor || ''}"
-                       @scroll="ui_autoExtendTimeline"
+                       @scroll="handleTlViewScroll"
                        ref="tlview"
                        >
         <div id="tl-user-profile">
@@ -198,14 +201,14 @@
                 <div v-for="(m,i) in a.retweeted_status.extended_entities.media"
                      class="tlarticle-media-item">
                   <a :href="imageViewerUrl(m.expanded_url, i)">
-                    <img :src="m.media_url"> </a>
+                    <img :src="m.media_url+':thumb'"> </a>
                 </div>
               </template>
               <template v-else-if="a.extended_entities">
                 <div v-for="(m,i) in a.extended_entities.media"
                      class="tlarticle-media-item">
                   <a :href="imageViewerUrl(m.expanded_url, i)">
-                    <img :src="m.media_url"> </a>
+                    <img :src="m.media_url+':thumb'"> </a>
                 </div>
               </template>
             </div>
@@ -222,7 +225,7 @@
         </div> -->
         <div id="tlreadmore"
              v-if="['home', 'user', 'bounded'].includes(tlUserProfile.tlType) && tl.length"
-             @click="e=> loadTimelineNextPage(tlUserProfile.tlType)"
+             @click="ui_autoExtendTimeline"
              :style="{'background': '#'+tlUserProfile.profile_link_color}"
              ref="tlreadmore"
              >
@@ -280,11 +283,8 @@
                   <div class="col">
                   </div>
                   <div class="col">
-                    sort mode: <input type="checkbox"
-                                      id="cb-mapsortmode"
-                                      @click="e=>toggleUsermapSortingMode(e.target.checked)"
-                                      :checked="usermapSortingMode === 'custom'"
-                                      > <label for="cb-mapsortmode"> {{usermapSortingMode}} </label>
+                    <label class="vm">sort mode:</label>
+                    <button @click="ui_toggleUsermapSortingMode">{{usermapSortingMode}}</button>
                   </div>
                   <div class="col">
                     <button @click="resetView">reset view</button>
@@ -298,8 +298,13 @@
                             }">▼</button>
                     <div :class="{'submenu-panel':true, 'transp': !showSubmenu}">
                       <div class="submenu--row">
-                        navigation mode: <input type="checkbox" id="cb-navimode" v-model="useSailMove">
-                        <label for="cb-navimode"> {{ useSailMove ? 'sail' : 'drag' }} </label>
+                        <label class="vm">navigation mode:</label>
+                        <button @click="ui_toggleNavigationMode">{{ useSailMove ? 'sail' : 'drag' }}</button>
+                      </div>
+
+                      <div class="submenu--row">
+                        <label class="vm">sorting shape:</label>
+                        <button @click="ui_toggleSortingShape">{{ sortingShape }}</button>
                       </div>
 
                       <div class="submenu--row"> <button @click="markAsReadUsers"
@@ -312,6 +317,16 @@
                       <div class="submenu--row submenu--row--separator"></div>
                       <div class="submenu--row"> <button @click="ui_beginPseudoMyselfOnActiveUser"
                                                          :disabled="isProcessing">begin pseudo home</button> </div>
+                      <div class="submenu--row submenu--row--separator"></div>
+                      <div class="submenu--row">
+                        <label class="vm">user data:</label>
+
+                        <a ref="exportUserDataHiddenLink" href="#" downlaoad="" class="hide"></a>
+                        <button @click="ui_exportUserData">export</button>
+
+                        <input ref="importUserDataHiddenFileInput" type="file" accept=".json" class="hide">
+                        <button @click="ui_importUserData">import</button>
+                      </div>
                     </div>
 
 
@@ -376,8 +391,10 @@
 
 
 
-    <div id="apikeywarning" v-if="initializeDone && showWarningKeysNotSet">
-      <span>API keys not set. <br>
+    <div id="apikeywarning"
+         :style="{'display': initializeDone && showWarningKeysNotSet ? 'flex' : ''}"
+         v-if="initializeDone && showWarningKeysNotSet">
+      <span>API keys are not set or invalid. <br>
       Check <a href="/" @click="openExtensionOption">Shinkai options</a> to set the keys.</span>
     </div>
 

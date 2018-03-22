@@ -1,5 +1,5 @@
 'use strict'
-const Version = {version: 'alpha20180319a'}
+const Version = {version: 'alpha20180323'}
 const Pref = {
   parallelConnection: 10,
   clawlEachUserMaxProcess: 100,
@@ -7,7 +7,10 @@ const Pref = {
   boundedTimelineMaxUsers: 200,
   generateTimelineBlockSize: 10,
 
+  sortingShape: 'spiral',
+  // sortingShape: 'wave',
   spiralCoef: {radius:32, h:2.0, offset:.7},
+  waveCoef: {n:13, kx:950, ky:400, k:4, offset:.2, viewOffset:.5},
 
   /// auto clawl
   autoClawlInterval: 11*60*1000,
@@ -33,6 +36,9 @@ const Pref = {
   // autoLoadAtFirst: false,
 
   ///
+  autoRefreshFriendsUsers: true,
+
+  ///
   enableClawlOnLoadDone: false,
   // enableClawlOnLoadDone: true,
 
@@ -54,6 +60,9 @@ const Pref = {
 
   ///
   uiShowInsideMethod: false,
+
+  ///
+  useTimelineViewAutoExtend: true,
 }
 
 
@@ -79,7 +88,9 @@ const app = new Vue({
     tl : List of Object<TwData.tltweet()> {...}
     */
 
-    tlUserProfile: {},
+    tlUserProfile: {
+      tlType: 'none',
+    },
     tlRawHome: [],
     tlRaw: [],
     cursorTl: 0,
@@ -93,7 +104,9 @@ const app = new Vue({
     */
 
     activeUid: '',
+    usersLoaded: false,
     isProcessing: false,
+    isProcessing_loadTimelineNextPage: false,
     homeLastTweetId: null,
     enabledAutoClawlEachUser: false,
     enabledAutoClawlHome: false,
@@ -113,11 +126,13 @@ const app = new Vue({
     transScale: 1.0,
     userTransforms: {},
     userTransformsCustomMap: {},
+    usersSortedOrder: {},
     noCustomTransformUsers: null,
     popuptweetThumbnails: {},
     _genThumbRequests:[],
     _viewNavigationCanceled: false,
     useSailMove: true,
+    sortingShape: '',
     usermapSortingMode: 'new',
     usermapVisibleUsers: {},
 
@@ -144,8 +159,8 @@ const app = new Vue({
         this._statusDissolveTimerId = setInterval(_=>{this.statusDissolve_ = ''}, delay)
       }
     },
-    usersLoaded(){return Object.keys(this.users).length},
     clawled(){return !this.firstClawlEachUser || !this.firstClawlHome},
+    usersCount(){return Object.keys(this.users).length},
   },
   async mounted(){
     this.someFixes()
@@ -157,7 +172,7 @@ const app = new Vue({
     this.activateThumbnailGenerator()
 
     this.initTokens()
-    this.prepareTwApi()
+    await this.prepareTwApi()
 
     await handleTwErrorAll(async _=>{
       await this.initSelfInfo()
@@ -170,7 +185,7 @@ const app = new Vue({
     if(this.myself) {
       if(Pref.autoLoadAtFirst) {
         this.loadDataFromStore()
-        if(!this.usersLoaded)
+        if(Pref.autoRefreshFriendsUsers && !this.usersCount)
           await this.refreshFriendsUsers()
         this.cooldownUsers() /// test
         this.sortUsers()
@@ -219,6 +234,7 @@ const app = new Vue({
       this.version = Version.version
       this.showInsideMethod = Pref.uiShowInsideMethod
       this.useSailMove = Pref.useSailMove
+      this.sortingShape = Pref.sortingShape
     },
 
     resetView(){
@@ -242,7 +258,7 @@ const app = new Vue({
           if(ta===-1)
             ta = Date.now()
 
-          if(Date.now() - ta > Pref.autoClawlInterval) {
+          if(!this.isProcessing && Date.now() - ta > Pref.autoClawlInterval) {
             await this.runClawlerEachUser()
             ta = Date.now()
           }
@@ -254,7 +270,7 @@ const app = new Vue({
           if(tb===-1)
             tb = Date.now()
 
-          if(Date.now() - tb > Pref.autoClawlHomeInterval) {
+          if(!this.isProcessing && Date.now() - tb > Pref.autoClawlHomeInterval) {
             await this.runClawlerHomeTL()
             tb = Date.now()
           }
@@ -285,10 +301,18 @@ const app = new Vue({
       this._genThumbRequests.push(media_url)
       this.activateThumbnailGenerator._shouldUpdate = true
 
+      /*
       getResizedImage(media_url, url=>{
         this.popuptweetThumbnails[media_url] = url
         this._genThumbRequests = this._genThumbRequests.filter(v=>v!==media_url)
       })
+      */
+      setTimeout(_=>{
+        const thumbUrl = `${media_url}:thumb`
+        this.popuptweetThumbnails[media_url] = thumbUrl
+        this._genThumbRequests = this._genThumbRequests.filter(v=>v!==media_url)
+      }, 10)
+
     },
 
     initTokens(){
@@ -296,10 +320,20 @@ const app = new Vue({
       this.accessToken = t
       this.accessTokenSecret = s
     },
-    prepareTwApi(){
+    async prepareTwApi(){
       TwApi.prepare()
       TwApi.setKeys({accessToken:this.accessToken, accessTokenSecret:this.accessTokenSecret})
-      this.showWarningKeysNotSet = !TwApi.isConsumerKeysSet()
+
+      let isValidKeys = false
+      try {
+        const e = await TwApi.tryCallApi()
+        if(e.message==='ok')
+          isValidKeys = true
+      }catch(e){
+        console.error('prepareTwApi: tryCallApi:',e)
+      }
+
+      this.showWarningKeysNotSet = !TwApi.isConsumerKeysSet() || !isValidKeys
     },
 
     loginWithTwitter(){
@@ -406,7 +440,7 @@ const app = new Vue({
 
 
       /// get users info by id
-      const usersPrev = this.getUsersFromStorage() || {}
+      const usersPrev = clone(this.users)
       const usersNext = {}
       if(this._cursorRefreshUser === null) {
         for(const uid of this._requestRefeshUser)
@@ -496,7 +530,8 @@ const app = new Vue({
     async beginPseudoMyself({user_id, screen_name}){
       assert(user_id || screen_name)
       assert(this.myself)
-      this._usersOrig = clone(this.users)
+      if(!this.pseudoMyself)
+        this._usersOrig = clone(this.users)
       const pm = await TwApi.getUserInfo({user_id, screen_name})
       this.pseudoMyself = TwData.user(pm)
       this._cleanRefreshFriendsUsersRequests()
@@ -767,8 +802,15 @@ const app = new Vue({
     },
 
     async loadTimelineNextPage(tlType){
-      assert(['home', 'user', 'bounded'].includes(tlType))
+      assert(['home', 'user', 'bounded', 'none'].includes(tlType))
       assert(tlType === this.tlUserProfile.tlType)
+      if(tlType === 'none')
+        return
+
+      const pn = `loadTimelineNextPage#${this.tlUserProfile.userId}`
+      if(this.blockProcess(pn))
+        return console.warn('loadTimelineNextPage process collision.')
+
       this.clearErrorMessages()
       const count = Pref.generateTimelineBlockSize
       const begin = 0
@@ -779,11 +821,13 @@ const app = new Vue({
         if(!tlRaw2) {
           // throw new Error('loadTimelineNextPage: errors inside getTimelineNextPage.')
           console.warn('loadTimelineNextPage Warning: errors inside getTimelineNextPage.')
+          this.unblockProcess(pn, {later: 20*1000})
           return
         }
 
         if(cannotViewUserTimeline(tlRaw2)) {
           this.generateTimelineDisplayCannotView()
+          this.unblockProcess(pn, {later: 30*1000})
           return
         }
 
@@ -796,12 +840,14 @@ const app = new Vue({
       const end2 = Math.min(end, tlRaw.length)
       this.cursorTl = end2
       this.generateTimelineDisplay(tlRaw, begin, end2)
+      this.unblockProcess(pn, {later: 1*1000})
     },
     async getTimelineNextPage(tlType){
       assert(['home', 'user', 'bounded'].includes(tlType))
       assert(tlType === this.tlUserProfile.tlType)
       // assert(this.tlUserProfile.tlType === 'home')
-      const maxId = this.tl.length ? arrlast(this.tl).tweetId : null
+      const ref = $switch2(tlType, {'home': this.tlRawHome, 'user': this.tlRaw, 'bounded': this.tlRaw })
+      const maxId = ref.length ? TwData.tltweetnouser(arrlast(ref)).tweetId : null
       assert(typeof maxId === 'string' || maxId === null)
 
       let tweetsRaw0
@@ -864,14 +910,19 @@ const app = new Vue({
       this.$forceUpdate()
       await sleep(100)
     },
-    ui_autoExtendTimeline(e){
-      if(!this.$refs.tlview || !this.$refs.tlreadmore)
-        return
-      const rect = this.$refs.tlview.getClientRects()[0]
-      const rect2 = this.$refs.tlreadmore.getClientRects()[0]
+    handleTlViewScroll(e){
+      if(Pref.useTimelineViewAutoExtend) {
+        if(!this.$refs.tlview || !this.$refs.tlreadmore)
+          return
+        const rect = this.$refs.tlview.getClientRects()[0]
+        const rect2 = this.$refs.tlreadmore.getClientRects()[0]
 
-      if( isVisibleRectIn(rect, rect2) )
-        this.loadTimelineNextPage(this.tlUserProfile.tlType)
+        if( isVisibleRectIn(rect, rect2) )
+          this.ui_autoExtendTimeline(e)
+      }
+    },
+    ui_autoExtendTimeline(e){
+      this.loadTimelineNextPage(this.tlUserProfile.tlType)
     },
 
     async switchAutoClawler(enabled){
@@ -897,7 +948,7 @@ const app = new Vue({
     },
 
     async runClawlerEachUser(){
-      if(!this.usersLoaded)
+      if(!this.usersCount)
         return await lag()
 
       if(this.isProcessing)
@@ -1001,8 +1052,8 @@ const app = new Vue({
       if(this.pseudoMyself)
         return console.warn('runClawlerHomeTL Warning: in pseudo myself.')
 
-      if(!this.usersLoaded)
-        return await lag()
+      // if(!this.usersCount)
+      //   return await lag()
 
       if(this.isProcessing)
         throw new Error('process collision caused.')
@@ -1138,18 +1189,26 @@ const app = new Vue({
     sortUsers(){
       const _prevMode = this.sortUsers._prevMode || ''
 
+      const spiralCoef = Pref.spiralCoef
       const offset = _do(_=>{
         if(this.clawled)
           return 0
 
         const R = 300
         for(const i of range(1000)) {
-          const [x,y] = spiral(i)
+          const [x,y] = spiral(i, spiralCoef)
           if(x**2+y**2 >= R**2)
             return i
         }
         return 0
       })
+
+      const makeOrder = usersSorted=>{
+        const o = {}
+        const zm=10000
+        usersSorted.forEach((u,i)=>o[u.userId]=zm-i)
+        return o
+      }
 
 
       if(this.usermapSortingMode === 'new') {
@@ -1158,29 +1217,34 @@ const app = new Vue({
                               .sort((a,b)=> (b.date_last_tweeted||0) - (a.date_last_tweeted||0))
 
         const userTransforms = {}
+        // const sortingShape = 'spiral'
+        // const sortingShape = 'wave'
+        const sortingShape = this.sortingShape
         for(const [i, u] of usersSorted.entries()) {
-          const [x,y] = spiral(i+offset)
+          const [x,y] = $switch2(sortingShape, {
+            'spiral': _=> spiral(i+offset, spiralCoef),
+            // 'wave': _=> wave(i+offset),
+            'wave': _=> wave(i, Pref.waveCoef),
+          })
           userTransforms[u.userId] = transformStrFromNums({x,y})
         }
         this.noCustomTransformUsers = null
         this.userTransforms = userTransforms
+        this.usersSortedOrder = makeOrder(usersSorted)
 
       } else if(this.usermapSortingMode === 'custom') {
         if(_prevMode !== this.usermapSortingMode) {
-          const c = this.getCustomMapFromStorage()
-          if(c) {
-            this.userTransformsCustomMap = c
-            const noCustomTransformUsers = {}
-            const trs = clone(c)
-            const coef = {...Pref.spiralCoef, radius: Pref.spiralCoef.radius/1.5}
-            Object.keys(this.users).filter(uid=>!trs[uid]).forEach((uid, i)=>{
-              const [x,y] = spiral(i, coef)
-              trs[uid] = transformStrFromNums({x,y})
-              noCustomTransformUsers[uid] = true
-            })
-            this.noCustomTransformUsers = noCustomTransformUsers
-            this.userTransforms = trs
-          }
+          const noCustomTransformUsers = {}
+          const trs = clone(this.userTransformsCustomMap)
+          const coef = {...spiralCoef, radius: spiralCoef.radius/1.5}
+          Object.keys(this.users).filter(uid=>!trs[uid]).forEach((uid, i)=>{
+            const [x,y] = spiral(i, coef)
+            trs[uid] = transformStrFromNums({x,y})
+            noCustomTransformUsers[uid] = true
+          })
+          this.noCustomTransformUsers = noCustomTransformUsers
+          this.userTransforms = trs
+          this.usersSortedOrder = makeOrder(Object.values(this.users))
         }
 
       } else
@@ -1196,36 +1260,89 @@ const app = new Vue({
     },
 
 
+    ui_exportUserData(){
+      assert(this.myself)
+      const a = this.$refs.exportUserDataHiddenLink
+      assert(a && a.tagName==='A')
+
+      const data = ImportExport.getUserData(this)
+      __DEBUG.log('ui_exportUserData', data)
+
+      const buildDateStr = _=>{
+        const d = new Date()
+        const y = ''+d.getFullYear()
+        const m = (''+(d.getMonth()+1)).padStart(2,'0')
+        const da = (''+d.getDate()).padStart(2,'0')
+        const a = d.getTime() - new Date(`${y}/${m}/${da}`).getTime()
+        return `${y}${m}${da}-${a}`
+      }
+      const filename = `Shinkai UserData ${this.myself.screen_name} ${buildDateStr()}.json`
+      const blob = new Blob([ JSON.stringify(data, null, 2) ], { 'type' : 'text/plain' })
+      const url = URL.createObjectURL(blob)
+      a.download = filename
+      a.href = url
+      a.click()
+      setTimeout(_=>{
+        URL.revokeObjectURL(url)
+        a.href='#'
+      }, 10*1000)
+    },
+    ui_importUserData(){
+      assert(this.myself)
+      const fi = this.$refs.importUserDataHiddenFileInput
+      assert(fi && fi.tagName==='INPUT' && fi.type==='file')
+
+      const loadData = data=>{
+        try{
+          ImportExport.setUserData(this, data)
+        }catch(e){
+          console.error('ui_importUserData', data)
+          this.generalErrorMessages.push(String(e))
+          return
+        }
+        this.sortUsers()
+        this.statusDissolve = 'import user data done.'
+        this.$forceUpdate()
+      }
+
+      const onchange = e=>{
+        fi.removeEventListener('change', onchange)
+        const reader = new FileReader()
+        reader.onload = ()=>{
+          const text = reader.result
+          let data = null
+          try{
+            data = JSON.parse(text)
+          } catch(e){
+            console.error('ui_importUserData Error: failed to parse as JSON.', String(text).slice(0,200))
+            this.generalErrorMessages.push('ui_importUserData Error: failed to parse as JSON.')
+            return
+          }
+          loadData(data)
+        }
+        assert(e.target===fi)
+        reader.readAsText(fi.files[0])
+      }
+      fi.addEventListener('change', onchange)
+      fi.click()
+    },
+
     loadDataFromStore(){
-      this.users = Storage.loadUserData(this)
-      this.userTransformsCustomMap = Storage.loadCustomMapData(this)
+      this.users = Storage.loadUserData(this) || {}
+      this.userTransformsCustomMap = Storage.loadCustomMapData(this) || {}
       this.sortUsers()
     },
-    /*saveDataToStore(){
-    },*/
-
-    getUsersFromStorage(){
-      if(this.pseudoMyself)
-        return console.warn('getUsersFromStorage Warning: in pseudo myself.')
-
-      return Storage.loadUserData(this)
+    saveDataToStore(){
+      this.saveUsersToStorage()
+      this.saveCustomMapToStorage()
     },
+
     saveUsersToStorage(){
       if(this.pseudoMyself)
         return console.warn('saveUsersToStorage Warning: in pseudo myself.')
 
       this.validate()
       Storage.saveUserData(this)
-    },
-
-    getCustomMapFromStorage(){
-      if(this.pseudoMyself)
-        return null
-
-      const o = Storage.loadCustomMapData(this)
-      const o2 = {}
-      Object.keys(o).filter(uid=> !!this.users[uid]).forEach(uid=>{ o2[uid] = o[uid] })
-      return o2
     },
     saveCustomMapToStorage(){
       if(this.pseudoMyself)
@@ -1398,6 +1515,7 @@ const app = new Vue({
         /// stop gif animation
         getResizedImage(user.profile_image_url, url=>{
           user.profile_image_url = url
+          this.$forceUpdate()
         }, {maxSize:Math.max(width,height)})
       }
     },
@@ -1415,9 +1533,34 @@ const app = new Vue({
     },
 
 
-    toggleUsermapSortingMode(checked){
-      this.usermapSortingMode = checked ? 'custom' : 'new'
+    ui_toggleUsermapSortingMode(){
+      this.usermapSortingMode = nextof(['custom', 'new'], this.usermapSortingMode)
       this.sortUsers()
+    },
+    ui_toggleNavigationMode(){
+      this.useSailMove = !this.useSailMove
+    },
+    ui_toggleSortingShape(){
+      this.sortingShape = nextof(['spiral', 'wave'], this.sortingShape)
+      this.sortUsers()
+    },
+
+
+    blockProcess(name){
+      if(!this.blockProcess._dict)
+        this.blockProcess._dict = {}
+
+      if(this.blockProcess._dict[name]===true)
+        return true
+      this.blockProcess._dict[name] = true
+      return false
+    },
+    unblockProcess(name, {later=-1}={}){
+      assert(this.blockProcess._dict[name] === true)
+      if(later > 0)
+        setTimeout(_=>this.blockProcess._dict[name] = false, later)
+      else
+        this.blockProcess._dict[name] = false
     },
 
     notifyHandledError(name, err){
@@ -1446,22 +1589,6 @@ const app = new Vue({
 })
 
 
-
-///
-function spiral(i, coef=null){
-  const {radius, h, offset} = coef || window.__DEBUG_spiralcoef || Pref.spiralCoef
-
-  // const len = t=>1/2*t*Math.sqrt(1+t**2) + 1/2*Math.log(Math.sqrt(1+t**2)+t)
-  // const len = t=>1/2*t*Math.sqrt(1+t**2)
-  // const tByLen = l=> l<=1/16 ? 0 : Math.sqrt(4*l-1/4)
-  const tByLen = l=> Math.sqrt(4*(1/16+l)-1/4)
-
-  const t = tByLen(i*h+offset)
-
-  const x = Math.round( t * Math.cos(t) * radius )
-  const y = Math.round( t * Math.sin(t) * radius )
-  return [x,y]
-}
 
 
 function transformStrToNums(transformStr){
@@ -1511,4 +1638,9 @@ function isVisibleRectIn(rectWindow, rect){
   const r = x+width
   const b = y+height
   return [{x,y},{x:r,y},{x,y:b},{x:r,y:b}].some(p=> containedIn(rectWindow, p))
+}
+
+function nextof(arr, v){
+  assert(arr.includes(v))
+  return arr[(arr.indexOf(v)+1)%arr.length]
 }

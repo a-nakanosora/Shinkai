@@ -38,8 +38,9 @@ const Storage = {
   },
   saveCustomMapData(app){
     const n = this.nameCustomMapData(app.myself)
-    const data = {...app.userTransformsCustomMap}
+    const data = osel(app.userTransformsCustomMap, Object.keys(app.users).join(','))
     this._save(n, data)
+
   },
   _customMapDataDefault: Object.freeze({}),
 
@@ -68,7 +69,42 @@ const Storage = {
   },
 }
 
+ImportExport = {
+  versionUserData: '1',
+  getUserData(app){
+    assert(app.myself)
+    const c = app.userTransformsCustomMap || {}
+    return {
+      shinkaiUserDataVer: ImportExport.versionUserData,
+      myself: osel(app.myself, `userId, screen_name, name`),
+      users: clone(app.users),
+      customMap: c,
+    }
+  },
+  setUserData(app, data){
+    assert(app.myself)
+    const {shinkaiUserDataVer, myself, users, customMap} = data
+    if( shinkaiUserDataVer !== ImportExport.versionUserData)
+      throw new Error('ImportExport.setUserData Error: invalid data: incorrect data version.')
+    if(!isobj(myself) || !isobj(users) || !isobj(customMap))
+      throw new Error('ImportExport.setUserData Error: invalid data.')
+    if(myself.userId !== app.myself.userId
+       || !Object.entries(users).every(([userId, u])=>userId===u.userId)
+       )
+      throw new Error('ImportExport.setUserData Error: invalid data.')
+
+    const users2 = {}
+    for(const n in users)
+      users2[n] = Object.seal(users[n])
+    app.users = users2
+    app.userTransformsCustomMap = clone(customMap)
+  },
+}
+
 const TwData = {
+  tltweetnouser(tweetRaw){
+    return TwData.tltweet(tweetRaw, {userId:'0', userScreenName:'tltweetnouser'})
+  },
   tltweet(tweetRaw, {userId, userScreenName, userProfileImageUrl=''}){
     assert(typeof userId === 'string')
     const bodyText0 = tweetRaw.full_text || tweetRaw.text || '' /// <!> full_text -- when `tweet_mode:'extended'`

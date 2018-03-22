@@ -142,6 +142,8 @@ button:focus {
   width: 100%;
   z-index: 10000;
   font-size: large;
+
+  display: none;
 }
 
 
@@ -434,6 +436,7 @@ button:focus {
   padding: 0 0 0.1rem 0.1rem;
   letter-spacing: .1rem;
   line-height: 1.7rem;
+  color: #545454;
 }
 .tlarticle-media-item {
   display: inline-block;
@@ -497,6 +500,13 @@ button:focus {
   border-radius: 6px;
   font-size: 0.9rem;
 }
+.popuptweet-item--rt {
+  /*background: #d5f1ff;*/
+  background: #e7f7ff;
+}
+.popuptweet-item--nothot {
+  opacity: .5;
+}
 .user-unit:hover .popuptweet-item {
   width: 150px;
   white-space: initial;
@@ -523,9 +533,9 @@ button:focus {
   padding: 0px 15px 0 4px;
   vertical-align: middle;
 }
-#ops .col > button {
+/*#ops .col > button {
   display: block;
-}
+}*/
 .inside-ops {
   background-color: #dfe6ec;
   margin-top: 10px;

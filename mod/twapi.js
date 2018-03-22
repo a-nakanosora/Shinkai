@@ -48,6 +48,23 @@ const TwApi = {
     return this._keys.consumerKey && this._keys.consumerSecret
   },
 
+  tryCallApi: ()=> new Promise((ok,ng)=>{
+    /// check the cunsumer keys are valid
+    const {consumerKey, consumerSecret} = TwApi._keys
+    const keys = {consumerKey, consumerSecret, accessToken:'', accessTokenSecret:''}
+    twFetch({
+      baseUrl: 'https://api.twitter.com/oauth/request_token',
+      params: {oauth_callback:''},
+      mathod: 'POST',
+    }, keys, e=>{
+      if(e.includes('Could not authenticate you.'))
+        ng({errorType:'TRI_CALL_API_ERROR', message:'tryCallApi Error', e:e})
+      ok({message:'ok'})
+    }, err=>{
+      ng({errorType:'TRI_CALL_API_ERROR', message:'tryCallApi Error', e:err})
+    })
+  }),
+
 
   getAccessToken: ({oauth_verifier}) => new Promise((ok,ng)=>{
     twFetch2({
@@ -186,6 +203,17 @@ const TwApi = {
 
     twFetch2({
       baseUrl: 'https://api.twitter.com/1.1/users/show.json',
+      params,
+      mathod: 'GET',
+    }, TwApi._handleResponse(ok,ng), TwApi._handleFetchError(ng))
+  }),
+
+  getRateLimitStatus: ({resources=null}={}) => new Promise((ok,ng)=>{
+    assert(resources === null || typeof resources==='string')
+    /// e.g. resources =~ 'help,users,search,statuses'
+    const params = resources ? {resources} : {}
+    twFetch2({
+      baseUrl: 'https://api.twitter.com/1.1/application/rate_limit_status.json',
       params,
       mathod: 'GET',
     }, TwApi._handleResponse(ok,ng), TwApi._handleFetchError(ng))

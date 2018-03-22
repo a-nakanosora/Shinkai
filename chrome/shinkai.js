@@ -14,16 +14,17 @@ function main(){
     if(/\/\/shinkaitauth\//i.test(o.url)) {
       /// redirect to tauth.html
       const q = o.url.replace(/^[^\?]+/, '')
-      console.log('Siderite', o, chrome.extension.getURL('tauth.html'), q)
       return {redirectUrl: chrome.extension.getURL('tauth.html') + q}
-      // return {redirectUrl: 'http://www.google.com/' + q}
     }
-  // },{urls: ['<all_urls>']},['blocking'])
-  // },{urls: ['*://shinkaitauthredirectorfakeurl.abc/*']},['blocking'])
   },{urls: ['*://shinkaitauth/*']},['blocking'])
 
 
-
+  /// keys example
+  void function(){
+    const keysExample = '{"ck":"rf20R2CMEyCiu5v2ih5xEvYhs","cks":"kc8Q9M64KWfB6V9T7czIwLlrhEhczZe5rdQCtdFjnmeoE3dCX1"}'
+    if(!localStorage.shinkaiopt)
+      localStorage.shinkaiopt = keysExample
+  }()
 }
 
 
