@@ -18,7 +18,8 @@ Shinkai の使用には Twitter API キーが必要です。APIキーを取得�
   - `Name` : 適当に分かりやすい名前を入力。既に使われている名前は使用できないことに注意
   - `Description` : 適当に10文字以上入力
   - `Website` : 適当に入力。 (例：`http://placeholder.com/`)
-  - `Callback URL` : 適当に入力。(例：`http://localhost/`) 当アプリでは本来は記入の必要は無いのですが、Twitterのバグにより入力しておく必要があります
+  - `Callback URL` : 適当に入力。(例：`http://localhost/`)  <br>
+    当アプリでは本来は記入の必要は無いのですが、ログイン周りのTwitterのバグを回避するため入力しておく必要があります
 - Developer Agreement の `Yes, I have read and agree to the Twitter Developer Agreement.` にチェックを入れて
   `Create your Twitter application` を押す
 - 正常に完了した場合は https://apps.twitter.com/ に先程入力したアプリ名のリンクが追加されている
