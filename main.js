@@ -1,5 +1,5 @@
 'use strict'
-const Version = {version: 'alpha20180323'}
+const Version = {version: 'alpha20180325'}
 const Pref = {
   parallelConnection: 10,
   clawlEachUserMaxProcess: 100,
@@ -63,6 +63,9 @@ const Pref = {
 
   ///
   useTimelineViewAutoExtend: true,
+
+  ///
+  showExperimentalFeatures: false,
 }
 
 
@@ -147,6 +150,7 @@ const app = new Vue({
     showInsideMethod: false,
     showSubmenu: false,
     showWarningKeysNotSet: false,
+    showExperimentalFeatures: false,
   },
   computed: {
     statusDissolve: {
@@ -235,6 +239,7 @@ const app = new Vue({
       this.showInsideMethod = Pref.uiShowInsideMethod
       this.useSailMove = Pref.useSailMove
       this.sortingShape = Pref.sortingShape
+      this.showExperimentalFeatures = Pref.showExperimentalFeatures
     },
 
     resetView(){

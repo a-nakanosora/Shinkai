@@ -1,14 +1,16 @@
 ﻿{
-	"name": "Shinkai (standalone)",
-	"description": "a twitter viewer",
-	"version": "0.1",
+	"name": "Shinkai",
+	"description": "a twitter viewer for exploring twitter world",
+	"version": "0.20180325",
 
   "background": {
     "scripts": ["chrome/shinkai.js"]
-    // ,"persistent": true
+  },
+  "icons": {
+    "48" : "chrome/res/icon.png"
   },
   "browser_action": {
-    // "default_icon": "icon.png",
+    "default_icon": "chrome/res/icon.png"
   },
 
   "options_ui": {
@@ -16,14 +18,9 @@
     "chrome_style": true
   },
 
-  // "permissions": ["webRequest", "webRequestBlocking", "http://*/*", "https://*/*"],
   "permissions": ["webRequest", "webRequestBlocking"
                  , "*://shinkaitauth/*", "*://api.twitter.com/*"
-                 // , "*://pbs.twimg.com/*"
                  ],
-  // "permissions": ["http://*/*", "https://*/*", "*://*/*"],
-  // "permissions": ["http://*/*", "https://*/*"],
-  // "permissions": [],
   "content_security_policy": "script-src 'self' 'unsafe-eval'; object-src 'self'",
   "web_accessible_resources": [
       "*"

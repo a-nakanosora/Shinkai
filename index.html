@@ -307,13 +307,12 @@
                         <button @click="ui_toggleSortingShape">{{ sortingShape }}</button>
                       </div>
 
+                      <div class="submenu--row submenu--row--separator"></div>
+
                       <div class="submenu--row"> <button @click="markAsReadUsers"
                                                          :disabled="isProcessing">mark as read</button> </div>
                       <div class="submenu--row"> <button @click="refreshFriendsUsers"
                                                          :disabled="isProcessing">refreshUsers</button> </div>
-                      <div class="submenu--row submenu--row--separator"></div>
-                      <div class="submenu--row"> <button @click="ui_loadBoundedTimeline"
-                                                         :disabled="isProcessing">show bounded timeline</button> </div>
                       <div class="submenu--row submenu--row--separator"></div>
                       <div class="submenu--row"> <button @click="ui_beginPseudoMyselfOnActiveUser"
                                                          :disabled="isProcessing">begin pseudo home</button> </div>
@@ -327,6 +326,12 @@
                         <input ref="importUserDataHiddenFileInput" type="file" accept=".json" class="hide">
                         <button @click="ui_importUserData">import</button>
                       </div>
+
+                      <template v-if="showExperimentalFeatures">
+                      <div class="submenu--row submenu--row--separator"></div>
+                      <div class="submenu--row"> <button @click="ui_loadBoundedTimeline"
+                                                         :disabled="isProcessing">show bounded timeline</button> </div>
+                      </template>
                     </div>
 
 
