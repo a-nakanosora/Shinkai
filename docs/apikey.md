@@ -1,7 +1,4 @@
-# Shinkai doc
-
-
-## API key の設定
+# Shinkai doc - Twitter API Key の設定
 
 ![img](./img/apikey1.jpg)
 
@@ -9,7 +6,7 @@ Shinkai の使用には Twitter API キーが必要です。APIキーを取得�
 正しく手続きを完了させるには`Twitterアカウントの設定`の`モバイル`に携帯電話番号を登録しておく必要があります。
 
 
-### Twitter Application の登録
+## Twitter Application の登録
 
 - Twitterにログイン
 - https://apps.twitter.com/ にアクセス
@@ -22,10 +19,10 @@ Shinkai の使用には Twitter API キーが必要です。APIキーを取得�
     当アプリでは本来は記入の必要は無いのですが、ログイン周りのTwitterのバグを回避するため入力しておく必要があります
 - Developer Agreement の `Yes, I have read and agree to the Twitter Developer Agreement.` にチェックを入れて
   `Create your Twitter application` を押す
-- 正常に完了した場合は https://apps.twitter.com/ に先程入力したアプリ名のリンクが追加されている
+- 正常に完了した場合は https://apps.twitter.com/ に先程入力したアプリ名のリンクが追加されています
 
 
-### Permission の設定
+## Permission の設定
 
 当アプリは Read only 権限のみで動作します。セキュリティのために必ずアプリの権限を設定してください。
 
@@ -34,14 +31,15 @@ Shinkai の使用には Twitter API キーが必要です。APIキーを取得�
 - `Read only` をクリックし `Update Settings` を押して完了
 
 
-### API key の取得と拡張機能への登録
+## API key の取得と拡張機能への登録
 
-![img](./img/apikey2.jpg)
+<img src="./img/apikey2.jpg" height="180">
+
 
 - https://apps.twitter.com/ から先程作成したアプリ名をクリック
 - `Keys and Access Tokens`をクリック
 - `Application Settings` にある `Consumer Key (API Key)` 及び `Consumer Secret (API Secret)` の2つが目的のAPIキーとなります
-- 拡張機能の Shinkai のオプションを開き、 `Consumer Key:` 及び `Consumer Secret:` に先程の値を入力し Save ボタンを押して登録完了
+- 拡張機能の Shinkai のオプションを開き、 `Consumer Key:` 及び `Consumer Secret:` に先程の値を入力し Save ボタンを押して設定の完了です
 
 
 
