@@ -1,5 +1,5 @@
 'use strict'
-const Version = {version: 'alpha20180325'}
+const Version = {version: 'alpha20180326'}
 const Pref = {
   parallelConnection: 10,
   clawlEachUserMaxProcess: 100,
@@ -511,7 +511,6 @@ const app = new Vue({
           this.statusDissolve = 'all users are not loaded yet. try refresh user after a few moment.'
       }
 
-      this.cooldownUsers() /// test
       this.sortUsers()
       this.isProcessing = false
 
@@ -1180,7 +1179,7 @@ const app = new Vue({
 
       this.saveUsersToStorage()
     },
-    markAsReadUsers(){
+    ui_unpopup(){
       for(const u of Object.values(this.users)) {
         u.tweet_updated = false
         u.tweet_update_state = ''
@@ -1548,6 +1547,10 @@ const app = new Vue({
     ui_toggleSortingShape(){
       this.sortingShape = nextof(['spiral', 'wave'], this.sortingShape)
       this.sortUsers()
+    },
+
+    ui_showHelp(){
+      window.open('https://github.com/a-nakanosora/Shinkai/blob/master/docs/')
     },
 
 

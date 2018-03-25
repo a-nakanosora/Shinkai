@@ -309,10 +309,10 @@
 
                       <div class="submenu--row submenu--row--separator"></div>
 
-                      <div class="submenu--row"> <button @click="markAsReadUsers"
-                                                         :disabled="isProcessing">mark as read</button> </div>
+                      <div class="submenu--row"> <button @click="ui_unpopup"
+                                                         :disabled="isProcessing">unpopup</button> </div>
                       <div class="submenu--row"> <button @click="refreshFriendsUsers"
-                                                         :disabled="isProcessing">refreshUsers</button> </div>
+                                                         :disabled="isProcessing">refresh users</button> </div>
                       <div class="submenu--row submenu--row--separator"></div>
                       <div class="submenu--row"> <button @click="ui_beginPseudoMyselfOnActiveUser"
                                                          :disabled="isProcessing">begin pseudo home</button> </div>
@@ -326,6 +326,9 @@
                         <input ref="importUserDataHiddenFileInput" type="file" accept=".json" class="hide">
                         <button @click="ui_importUserData">import</button>
                       </div>
+
+                      <div class="submenu--row submenu--row--separator"></div>
+                      <div class="submenu--row"> <button @click="ui_showHelp">help</button> </div>
 
                       <template v-if="showExperimentalFeatures">
                       <div class="submenu--row submenu--row--separator"></div>
@@ -399,8 +402,15 @@
     <div id="apikeywarning"
          :style="{'display': initializeDone && showWarningKeysNotSet ? 'flex' : ''}"
          v-if="initializeDone && showWarningKeysNotSet">
-      <span>API keys are not set or invalid. <br>
-      Check <a href="/" @click="openExtensionOption">Shinkai options</a> to set the keys.</span>
+      <span style="text-align: center;">API keys are not set or invalid.
+        <br>
+        Check <a href="/" @click="openExtensionOption">Shinkai options</a> to set the keys.
+        <br>
+
+        <span style="font-size: 1rem; line-height: 4rem;">
+        <a href="https://github.com/a-nakanosora/Shinkai/blob/master/docs/apikey.md">help for getting Twitter API keys</a>
+        </span>
+      </span>
     </div>
 
 </div>
