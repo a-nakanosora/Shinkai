@@ -501,8 +501,7 @@ button:focus {
   font-size: 0.9rem;
 }
 .popuptweet-item--rt {
-  /*background: #d5f1ff;*/
-  background: #e7f7ff;
+  background: #ecf9ffcf;
 }
 .popuptweet-item--nothot {
   opacity: .5;

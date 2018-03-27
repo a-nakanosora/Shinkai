@@ -1,7 +1,7 @@
 ﻿{
 	"name": "Shinkai",
 	"description": "a twitter viewer for exploring twitter world",
-	"version": "1.0",
+	"version": "1.0.1",
   "version_name": "alpha20180327",
 
   "background": {
