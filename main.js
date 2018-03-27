@@ -1,5 +1,4 @@
 'use strict'
-const Version = {version: 'alpha20180326'}
 const Pref = {
   parallelConnection: 10,
   clawlEachUserMaxProcess: 100,
@@ -140,7 +139,6 @@ const app = new Vue({
     usermapVisibleUsers: {},
 
     /// UI View
-    status: '',
     statusDissolve_: '',
     _statusDissolveTimerId: -1,
     twitterApiErrorMessage: '',
@@ -201,6 +199,8 @@ const app = new Vue({
 
       await lag()
     }
+
+    this.showVersion()
   },
   methods: {
     print(...args){ console.log(...args) },
@@ -235,11 +235,18 @@ const app = new Vue({
       }
     },
     applyPrefToApp(){
-      this.version = Version.version
       this.showInsideMethod = Pref.uiShowInsideMethod
       this.useSailMove = Pref.useSailMove
       this.sortingShape = Pref.sortingShape
       this.showExperimentalFeatures = Pref.showExperimentalFeatures
+    },
+    async showVersion(){
+      try{
+        const v = await Version.getVersion()
+        this.version = v
+      }catch(e){
+        console.error('showVersion Error: cannot get version info.')
+      }
     },
 
     resetView(){
@@ -1524,16 +1531,17 @@ const app = new Vue({
       }
     },
 
+    ui_openLink(e){
+      e.preventDefault()
+      const a = e.currentTarget
+      assert(a.tagName==='A' && a.href)
+      window.open(a.href)
+    },
     permalinkUrl(tweet){
       if(!tweet.tweetId && tweet.userScreenName)
         return ''
       const url = `https://mobile.twitter.com/${tweet.userScreenName}/status/${tweet.tweetId}`
       return url
-    },
-    permalinkClicked(e){
-      e.preventDefault()
-      assert(e.target.tagName==='A' && e.target.href)
-      window.open(e.target.href)
     },
 
 

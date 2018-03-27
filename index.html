@@ -13,6 +13,7 @@
   <script src="/mod/shape.js"></script>
   <script src="/mod/data.js"></script>
   <script src="/mod/session.js"></script>
+  <script src="/mod/version.js"></script>
   <link rel="stylesheet" type="text/css" href="./main.css"></link>
 <style>
 </style>
@@ -29,7 +30,8 @@
 
     <div id="home-message" v-if="initializeDone && !clawled">
       <div id="home-message--version">
-        Shinkai<br>version: {{version}}
+        Shinkai<br>
+        <span v-if="version">version: {{version}}<span>
       </div>
     </div>
 
@@ -92,7 +94,7 @@
                   <span v-if="pt.extended_entities">
                     <template v-for="(m, i) in pt.extended_entities.media">
                       <div class="popuptweet-media-item">
-                        <a :href="imageViewerUrl(m.expanded_url, i)">
+                        <a :href="imageViewerUrl(m.expanded_url, i)" @click="ui_openLink">
                           <!-- <img :src="popuptweetThumbnails[m.media_url] || ''"> </a> -->
                           <img :src="m.media_url+':thumb'"> </a>
                       </div>
@@ -150,7 +152,7 @@
 
           <div v-if="tlUserProfile.bySingleUser">
             <div class="user-icon" style="margin: 3px; float: left; z-index: 1;">
-              <a :href="tlUserProfile.profileUrl">
+              <a :href="tlUserProfile.profileUrl" @click="ui_openLink">
                 <img class="user-icon--thumb" :src="tlUserProfile.profile_image_url"> </a>
             </div>
             <div class="user-label">
@@ -200,14 +202,14 @@
               <template v-if="a.retweeted_status && a.retweeted_status.extended_entities">
                 <div v-for="(m,i) in a.retweeted_status.extended_entities.media"
                      class="tlarticle-media-item">
-                  <a :href="imageViewerUrl(m.expanded_url, i)">
+                  <a :href="imageViewerUrl(m.expanded_url, i)" @click="ui_openLink">
                     <img :src="m.media_url+':thumb'"> </a>
                 </div>
               </template>
               <template v-else-if="a.extended_entities">
                 <div v-for="(m,i) in a.extended_entities.media"
                      class="tlarticle-media-item">
-                  <a :href="imageViewerUrl(m.expanded_url, i)">
+                  <a :href="imageViewerUrl(m.expanded_url, i)" @click="ui_openLink">
                     <img :src="m.media_url+':thumb'"> </a>
                 </div>
               </template>
@@ -215,7 +217,7 @@
 
 
 
-            <a class="tlarticle-permalink" :href="permalinkUrl(a)" @click="permalinkClicked"></a>
+            <a class="tlarticle-permalink" :href="permalinkUrl(a)" @click="ui_openLink"></a>
           </div>
         </div>
 
@@ -363,7 +365,6 @@
                 </div>
 
                 <div id="status-messages">
-                  <div>{{status}}</div>
                   <div>{{statusDissolve}}</div>
                   <div ref="statusImgGen"></div>
 
@@ -372,8 +373,8 @@
                     <span class="vt"> processing... </span>
                   </div>
 
-                  <div class="status-error-message">{{twitterApiErrorMessage}}</div>
-                  <div class="status-error-message">{{generalErrorMessages.join('\n')}}</div>
+                  <div class="status-error-message" v-if="!!twitterApiErrorMessage">{{twitterApiErrorMessage}}</div>
+                  <div class="status-error-message" v-if="generalErrorMessages.length">{{generalErrorMessages.join('\n')}}</div>
                 </div>
               </div>
             </div>

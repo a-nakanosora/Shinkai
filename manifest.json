@@ -1,7 +1,8 @@
 ﻿{
 	"name": "Shinkai",
 	"description": "a twitter viewer for exploring twitter world",
-	"version": "0.20180326",
+	"version": "1.0",
+  "version_name": "alpha20180327",
 
   "background": {
     "scripts": ["chrome/shinkai.js"]
