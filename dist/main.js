@@ -64,7 +64,7 @@ const Pref = {
   useTimelineViewAutoExtend: true,
 
   ///
-  showExperimentalFeatures: false,
+  showExperimentalFeatures: true,
 }
 
 
@@ -790,7 +790,7 @@ const app = new Vue({
           tlRaw.push(...tweets)
         }
       }
-      this.tlRaw = tlRaw
+      this.tlRaw = tlRaw.sort((a,b)=> new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
       this.setTlProfile('bounded', {
         bySingleUser: false,

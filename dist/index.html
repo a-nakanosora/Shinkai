@@ -2,8 +2,9 @@
 <head>
   <title>Shinkai</title>
   <meta charset="utf-8"/>
-  <!-- <script src="/lib/vue.js"></script> -->
+  <!-- <script src="/lib/buew.js"></script> -->
   <script src="/lib/vue.min.js"></script>
+  <script src="/lib/sha1.min.js"></script>
   <script src="/mod/utils.js"></script>
   <script src="/mod/utilstwit.js"></script>
   <script src="/mod/globalpref.js"></script>
@@ -334,6 +335,7 @@
 
                       <template v-if="showExperimentalFeatures">
                       <div class="submenu--row submenu--row--separator"></div>
+                      <div class="submenu--row"> <label class="vm">experimental:</label> </div>
                       <div class="submenu--row"> <button @click="ui_loadBoundedTimeline"
                                                          :disabled="isProcessing">show bounded timeline</button> </div>
                       </template>

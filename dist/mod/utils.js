@@ -201,47 +201,6 @@ function oset(keys){
   return o
 }
 
-
-function keyset(keys){
-  /// e.g. keyset(`x,y,z:{a},'p q r'`)
-  assert(typeof keys === 'string')
-  assert(keys.match(/^[a-z\d_$'"\s\n:{},\-]*$/i))
-  const s = keys.replace(/([a-z\d_$'"])\s*(\,|\}|$)/img, '$1:true$2')
-                .replace(/\{[\s\n]*\}/g, 'true') /// 'a:{}' -> 'a:true'
-  // console.log(s)
-  // console.log('({'+s+'})')
-  return eval('({'+s+'})')
-}
-
-function oextract(obj, keys){
-  /**
-  e.g.
-    oextract({x:123, y:{z:456, w:789}}, `x, y`) => {x:123, y:{z:456, w:789}}
-    oextract({x:123, y:{z:456, w:789}}, `x, y:{z}`) => {x:123, y:{z:456}}
-  */
-  assert(isobj(keys) || typeof keys === 'string')
-  const keys2 = isobj(keys) ? keys : keyset(keys)
-  const o = {}
-  const rec = (src, dest, ks)=>{
-    for(const [n, x] of Object.entries(ks)) {
-      if(!(n in src))
-        continue
-
-      if(isobj(x)) {
-        if(src[n] && isobj(src[n])) {
-          dest[n] = {}
-          rec(src[n], dest[n], x)
-        }
-      } else
-        dest[n] = src[n]
-    }
-  }
-  rec(obj, o, keys2)
-  return o
-}
-
-
-
 /**
 osel(obj, selstr)
 e.g.
@@ -435,5 +394,75 @@ __DEBUG.print = (...args) => __DEBUG.showlog(...args).forEach(a=>console.log(...
 window.p = (...args) => {__DEBUG.print(...args); console.log('%c-- end of log --', 'color: #ccc;'); return ''}
 
 
+///
+__DEBUG.showImportExportLocalStorageUI = function(){
+  console.log('__saveLocalStorage')
+  const blob = new Blob([ JSON.stringify(localStorage, null, 2) ], { 'type' : 'text/plain' })
+  const url = URL.createObjectURL(blob)
+  const cn_container = 'showImportExportLocalStorageUI-export'
+
+  ///
+  Array.from(document.querySelectorAll('.'+cn_container)).forEach(e=>e.remove())
+
+  ///
+  const container = html(`
+    <div class="${cn_container}" style="
+            background: #f5f7f8;
+            position: fixed;
+            bottom: 20px;
+            padding: 16px;
+            ">
+            <div>Import/Export entire LocalStorage</div>
+            </div>
+    `)
+  const export_a = html(`
+    <a href="${url}"
+       download="storage.json"
+       style="display:none;"
+       >exportLocalStorage</a>
+    `)
+  const export_button = html(`
+    <button>export</button>
+    `)
+
+  const import_input = html(`<label style="display:none;"><input type="file" accept=".json">import</label>`)
+  const import_button = html(`<button>import</button>`)
+
+  container.append(export_a)
+  container.append(export_button)
+  container.append(html(`<br>`))
+  container.append(import_input)
+  container.append(import_button)
+  document.body.append(container)
+
+  import_input.addEventListener('change', e=>{
+    const inp = e.target
+    const reader = new FileReader()
+    reader.onload = ()=>{
+      const text = reader.result
+      const o = JSON.parse(text)
+      console.log('window.__json', o)
+      window.__json = o
+
+      ///
+      for(const n in localStorage)
+        delete localStorage[n]
+      for(const n in o)
+        localStorage[n] = o[n]
+    }
+    reader.readAsText(inp.files[0])
+  })
+
+  export_button.addEventListener('click', e=>{
+    // const extensionId = location.hostname
+    const extensionId = chrome.runtime.id
+    const filename = `shinkai_localstorage_${extensionId}_${Date.now()}.json`
+    export_a.download = filename
+    export_a.click()
+  })
+  import_button.addEventListener('click', e=>{
+    import_input.click()
+  })
+}
 
 

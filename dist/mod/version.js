@@ -6,8 +6,7 @@ const Version = {
     const e = await fetch(manifest)
     const t = await e.text()
 
-    // const o = JSON.parse(t)
-    const o = eval('('+t+')')
+    const o = JSON.parse(t)
 
     return o.version_name
   },
