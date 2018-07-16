@@ -36,6 +36,22 @@ function arrRemoved(arr, v){
   return a
 }
 
+function toUnique(arr, key=v=>v){
+  /// e.g. toUnique([1,2,2,2,3,4,4,5])
+  /// e.g. toUnique([{x:1, y:'a'}, {x:2, y:'a'}, {x:1, y:'b'}], o=>o.x)
+  /// e.g. toUnique([{x:1, y:'a'}, {x:2, y:'a'}, {x:1, y:'b'}], o=>o.y)
+  const map = new Map()
+  const a = []
+  arr.forEach(v=>{
+    const k = key(v)
+    if(map.has(k))
+      return
+    map.set(k)
+    a.push(v)
+  })
+  return a
+}
+
 function assert(b,msg='',obj=null){
   if(!b) {
     if(obj)
@@ -465,4 +481,10 @@ __DEBUG.showImportExportLocalStorageUI = function(){
   })
 }
 
+
+///
+__DEBUG.clearUserData = function(){
+  app.users = {}
+  app.saveDataToStore()
+}
 

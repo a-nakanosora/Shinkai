@@ -5,6 +5,7 @@ const Pref = {
   refreshUserMaxProcess: 500,
   boundedTimelineMaxUsers: 200,
   generateTimelineBlockSize: 10,
+  latestTweetsRefCount: 20,
 
   sortingShape: 'spiral',
   // sortingShape: 'wave',
@@ -100,10 +101,12 @@ const app = new Vue({
     popuptweets: {},
     /**
     popuptweets : Object {
-      [userId]: Object<TwData.popuptweet()> {...},
+      [userId]: List of Object<TwData.popuptweet()> {...},
       ...
     }
     */
+    pastPopupTweets: {}, /// Object { [userId]: List of Object<TwData.popuptweet> }
+    usePastPopupTweets: false,
 
     activeUid: '',
     usersLoaded: false,
@@ -126,8 +129,8 @@ const app = new Vue({
     transX:0,
     transY:0,
     transScale: 1.0,
-    userTransforms: {},
-    userTransformsCustomMap: {},
+    userTransforms: {}, /// Object { [userId]: String }
+    userTransformsCustomMap: {}, /// Object { [userId]: String }
     usersSortedOrder: {},
     noCustomTransformUsers: null,
     popuptweetThumbnails: {},
@@ -163,6 +166,7 @@ const app = new Vue({
     },
     clawled(){return !this.firstClawlEachUser || !this.firstClawlHome},
     usersCount(){return Object.keys(this.users).length},
+    popuptweetsRef(){return this.usePastPopupTweets ? this.pastPopupTweets : this.popuptweets },
   },
   async mounted(){
     this.someFixes()
@@ -229,6 +233,9 @@ const app = new Vue({
       try{
         const overrides = JSON.parse(localStorage['Shinkai_PrefOverride'] || '{}')
         Object.assign(Pref, overrides)
+        const keys = Object.keys(overrides).map(s=>`"${s}"`).join(', ').trim()
+        if(keys)
+          console.log('applyPrefOverrides:', keys)
       }catch(e){
         this.generalErrorMessages.push(`applyPrefOverrides Error: ${e.message}`)
         console.warn('applyPrefOverrides Error:', e)
@@ -990,13 +997,16 @@ const app = new Vue({
         for(const block of us2Blocks) {
           const b = await Promise.all( block.map(u=> TwApi.getUserTimeline({
               user_id:u.userId,
-              // count:10,
-              count:3,
+              count:Pref.latestTweetsRefCount,
+              // count:3,
               trim_user: true,
               exclude_replies: Pref.excludeRepliesOnClawl,
               // include_rts: true,
-              since_id: (u.last_tweet_id && !(Pref.alwaysShowAllClawlTlAtFirst && this.firstClawlEachUser))
-                          ? incrementStrId(u.last_tweet_id, 0)  : null,
+              // since_id: (u.last_tweet_id && !(Pref.alwaysShowAllClawlTlAtFirst && this.firstClawlEachUser))
+              //             ? incrementStrId(u.last_tweet_id, 0)  : null,
+              since_id: ((u.latestTweets && u.latestTweets[0] && u.latestTweets[0].tweetId)
+                         && !(Pref.alwaysShowAllClawlTlAtFirst && this.firstClawlEachUser))
+                          ? incrementStrId(u.latestTweets[0].tweetId, 0)  : null,
             }) ) )
 
           for(const [u, tweetsRaw0] of zip(block,b)) {
@@ -1005,10 +1015,22 @@ const app = new Vue({
               continue
             }
 
-            const tweetsRaw = tweetsRaw0.filter(v=> new Date(v.created_at).getTime() >  (u.date_last_tweeted||0))
-            __DEBUG.log('clawl each user tweets', tweetsRaw, u.screen_name, u)
             assert(typeof u.userId === 'string')
             const un = usersNext[u.userId]
+
+            if(tweetsRaw0.length) {
+              const latestTweets = clone(un.latestTweets || [])
+              const latestTweets2 = _do(_=>{
+                const a = tweetsRaw0.map(t=>TwData.tweetdate(t)).concat(latestTweets)
+                const b = toUnique(a, o=>o.tweetId) /// omit duplicates
+                // return b.slice(0, Pref.latestTweetsRefCount).sort((a,b)=>b.date-a.date)
+                return b.slice(0, Pref.latestTweetsRefCount)
+              })
+              un.latestTweets = latestTweets2
+            }
+
+            const tweetsRaw = tweetsRaw0.filter(v=> new Date(v.created_at).getTime() >  (u.date_last_tweeted||0))
+            __DEBUG.log('clawl each user tweets', tweetsRaw, u.screen_name, u)
             const t = Date.now()
             un.date_last_checked = t
 
@@ -1020,8 +1042,9 @@ const app = new Vue({
             if(tweetsRaw.length) {
               un.date_last_updated = t
               un.date_last_tweeted = _do(_=>{
+                  const prev = un.date_last_tweeted
                   const res2 = tweetsRaw.filter(tw=> isVisibleTweetInHome(tw, usersNext) )
-                  return res2.length ? new Date(res2[0].created_at).getTime() : un.date_last_tweeted
+                  return res2.length ? new Date(res2[0].created_at).getTime() : prev
                 })
               un.last_tweet_id = tweetsRaw[0].id_str
               un.tweet_updated = true
@@ -1038,6 +1061,14 @@ const app = new Vue({
                     this.makeThumbnail(m.media_url)
                 }
               }
+
+              if(!this.pastPopupTweets[u.userId])
+                this.pastPopupTweets[u.userId] = []
+              this.pastPopupTweets[u.userId] = toUnique(this.popuptweets[u.userId]
+                                                          .concat(this.pastPopupTweets[u.userId])
+                                                       , o=>o.date)
+                                                 .slice(0,3)
+                                                 .map(clone)
             } else {
             }
           }
@@ -1147,6 +1178,14 @@ const app = new Vue({
                 this.makeThumbnail(m.media_url)
             }
           }
+
+          if(!this.pastPopupTweets[u.userId])
+            this.pastPopupTweets[u.userId] = []
+          this.pastPopupTweets[u.userId] = toUnique(this.popuptweets[u.userId]
+                                                          .concat(this.pastPopupTweets[u.userId])
+                                                       , o=>o.date)
+                                            .slice(0,3)
+                                            .map(clone)
         }
 
         if(this.tlRawHome.length)
@@ -1222,14 +1261,40 @@ const app = new Vue({
       }
 
 
-      if(this.usermapSortingMode === 'new') {
+      if(this.usermapSortingMode === 'new' || this.usermapSortingMode === 'tweetrate') {
         /// sort mode : last tweet date
-        const usersSorted = Object.values(this.users)
-                              .sort((a,b)=> (b.date_last_tweeted||0) - (a.date_last_tweeted||0))
+        const usersSorted = _do(_=>{
+          if(this.usermapSortingMode === 'new') {
+            return Object.values(this.users)
+                         .sort((a,b)=> (b.date_last_tweeted||0) - (a.date_last_tweeted||0))
+
+          } else if(this.usermapSortingMode === 'tweetrate') {
+            const l = omap(this.users, u=> (u.latestTweets && u.latestTweets.length)
+                                              ? u.latestTweets : [{date: Date.now()}, {date: 0}])
+            const aves = omap(l, (latestTweets0, uid)=>{
+              // if(latestTweets.length === 1)
+              //   return {average: Date.now()-latestTweets[0].date, uid}
+
+              const latestTweets = [{date: Date.now()}, ...latestTweets0]
+              const deltas = [...pairs(latestTweets)].map(([a,b])=>a.date-b.date)
+              const average = deltas.reduce((a,b)=>a+b)/deltas.length
+              return {average, uid}
+            })
+            // return Object.values(aves).sort((a,b)=> b.average-a.average)
+            // return Object.values(aves).sort((a,b)=> a.average-b.average)
+            return Object.values(aves)
+                     .sort((a,b)=> a.average-b.average)
+                     // .map(a=> this.users[a.uid])
+                     .map(a=> {
+                        if(!this.users[a.uid])
+                          console.warn('unknown case 2:', a.uid, a)
+                        return this.users[a.uid]
+                      })
+                     .filter(u=>u) ///
+          }
+        })
 
         const userTransforms = {}
-        // const sortingShape = 'spiral'
-        // const sortingShape = 'wave'
         const sortingShape = this.sortingShape
         for(const [i, u] of usersSorted.entries()) {
           const [x,y] = $switch2(sortingShape, {
@@ -1257,7 +1322,6 @@ const app = new Vue({
           this.userTransforms = trs
           this.usersSortedOrder = makeOrder(Object.values(this.users))
         }
-
       } else
         throw new Error('sortUsers Error: invalid mode: '+this.usermapSortingMode)
 
@@ -1311,6 +1375,8 @@ const app = new Vue({
           this.generalErrorMessages.push(String(e))
           return
         }
+        this.saveDataToStore()
+
         this.sortUsers()
         this.statusDissolve = 'import user data done.'
         this.$forceUpdate()
@@ -1339,13 +1405,18 @@ const app = new Vue({
     },
 
     loadDataFromStore(){
-      this.users = Storage.loadUserData(this) || {}
-      this.userTransformsCustomMap = Storage.loadCustomMapData(this) || {}
+      /*this.users = Storage.loadUserData(this) || {}
+      this.userTransformsCustomMap = Storage.loadCustomMapData(this) || {}*/
+      Storage.loadEntireData(this)
       this.sortUsers()
     },
     saveDataToStore(){
-      this.saveUsersToStorage()
-      this.saveCustomMapToStorage()
+      if(this.pseudoMyself)
+        return console.warn('saveDataToStore Warning: in pseudo myself.')
+
+      /*this.saveUsersToStorage()
+      this.saveCustomMapToStorage()*/
+      Storage.saveEntireData(this)
     },
 
     saveUsersToStorage(){
@@ -1353,13 +1424,15 @@ const app = new Vue({
         return console.warn('saveUsersToStorage Warning: in pseudo myself.')
 
       this.validate()
-      Storage.saveUserData(this)
+      // Storage.saveUserData(this)
+      this.saveDataToStore()
     },
     saveCustomMapToStorage(){
       if(this.pseudoMyself)
         return
 
-      Storage.saveCustomMapData(this)
+      // Storage.saveCustomMapData(this)
+      this.saveDataToStore()
     },
 
 
@@ -1546,7 +1619,7 @@ const app = new Vue({
 
 
     ui_toggleUsermapSortingMode(){
-      this.usermapSortingMode = nextof(['custom', 'new'], this.usermapSortingMode)
+      this.usermapSortingMode = nextof(['new', 'custom', 'tweetrate'], this.usermapSortingMode)
       this.sortUsers()
     },
     ui_toggleNavigationMode(){

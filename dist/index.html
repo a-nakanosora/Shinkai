@@ -83,11 +83,11 @@
                    @load="e=>tweakProfileImage(u, e.target.naturalWidth, e.target.naturalHeight)"
                    >
 
-              <div v-if="popuptweets[u.userId] && popuptweets[u.userId].length"
+              <div v-if="popuptweetsRef[u.userId] && popuptweetsRef[u.userId].length"
                    class="popuptweet balloon"
                    :style="{ __opacity: u.tweet_updated ? '1.0' : '.5' }"
                    >
-                <div v-for="pt in reverse(popuptweets[u.userId])"
+                <div v-for="pt in reverse(popuptweetsRef[u.userId])"
                      :class="[ 'popuptweet-item'
                              , {'popuptweet-item--rt': !!pt.retweeted_status}
                              , {'popuptweet-item--nothot': !pt.hot}
@@ -311,6 +311,19 @@
                       </div>
 
                       <div class="submenu--row submenu--row--separator"></div>
+
+
+                      <div class="submenu--row">
+                        <input type="checkbox"
+                               id="cb-usePastPopupTweets"
+                               v-model="usePastPopupTweets"
+                               :checked="usePastPopupTweets"
+                               >
+                        <label for="cb-usePastPopupTweets" class="vm cb-onoff"> show past popup </label>
+                        <!-- test:
+                        <input type="checkbox" v-model="abc"> -->
+                      </div>
+
 
                       <div class="submenu--row"> <button @click="ui_unpopup"
                                                          :disabled="isProcessing">unpopup</button> </div>
